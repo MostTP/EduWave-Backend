@@ -4,9 +4,6 @@ const sendEmail = require('../utils/sendEmail');
 const generateVerificationToken = require('../utils/generateVerificationToken');
 const crypto = require('crypto');
 
-// @desc    Register user
-// @route   POST /auth/register
-// @access  Public
 exports.register = async (req, res) => {
   try {
     const { fullName, email, password, passwordConfirm } = req.body;
@@ -98,9 +95,6 @@ exports.register = async (req, res) => {
   }
 };
 
-// @desc    Login user
-// @route   POST /auth/login
-// @access  Public
 exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -248,9 +242,6 @@ exports.verifyEmail = async (req, res) => {
   }
 };
 
-// @desc    Resend verification email
-// @route   POST /auth/resend-verification
-// @access  Public
 exports.resendVerification = async (req, res) => {
   try {
     const { email } = req.body;
