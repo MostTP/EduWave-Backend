@@ -328,6 +328,278 @@
 					}
 				}
 			]
+		},
+		{
+			"name": "Courses",
+			"item": [
+				{
+					"name": "Get All Courses",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/courses",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"courses"
+							]
+						},
+						"description": "Get all courses"
+					}
+				},
+				{
+					"name": "Get Course by ID",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    const response = pm.response.json();",
+									"    if (response._id) {",
+									"        pm.collectionVariables.set('courseId', response._id);",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/courses/:id",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"courses",
+								":id"
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": "{{courseId}}",
+									"description": "Course ID"
+								}
+							]
+						},
+						"description": "Get a single course by ID"
+					}
+				},
+				{
+					"name": "Create Course",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    const response = pm.response.json();",
+									"    if (response._id) {",
+									"        pm.collectionVariables.set('courseId', response._id);",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"Introduction to JavaScript\",\n  \"desc\": \"Learn the basics of JavaScript programming language\",\n  \"courseduration\": 120,\n  \"lessons\": [\n    {\n      \"title\": \"Variables and Data Types\",\n      \"description\": \"Understanding variables, let, const, and data types in JavaScript\",\n      \"duration\": 15,\n      \"totallesson\": 1,\n      \"videoUrl\": \"https://example.com/videos/js-variables.mp4\"\n    },\n    {\n      \"title\": \"Functions\",\n      \"description\": \"Learn how to create and use functions in JavaScript\",\n      \"duration\": 20,\n      \"totallesson\": 2,\n      \"videoUrl\": \"https://example.com/videos/js-functions.mp4\"\n    },\n    {\n      \"title\": \"Arrays and Objects\",\n      \"description\": \"Working with arrays and objects in JavaScript\",\n      \"duration\": 25,\n      \"totallesson\": 3,\n      \"videoUrl\": \"https://example.com/videos/js-arrays-objects.mp4\"\n    }\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/courses",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"courses"
+							]
+						},
+						"description": "Create a new course with lessons"
+					}
+				},
+				{
+					"name": "Update Course",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"Advanced JavaScript\",\n  \"desc\": \"Updated course description\",\n  \"courseduration\": 180,\n  \"lessons\": [\n    {\n      \"title\": \"Updated Lesson Title\",\n      \"description\": \"Updated lesson description\",\n      \"duration\": 30,\n      \"totallesson\": 1,\n      \"videoUrl\": \"https://example.com/videos/updated-lesson.mp4\"\n    }\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/courses/:id",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"courses",
+								":id"
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": "{{courseId}}",
+									"description": "Course ID"
+								}
+							]
+						},
+						"description": "Update a course by ID. You can update title, desc, courseduration, and/or lessons."
+					}
+				},
+				{
+					"name": "Delete Course",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/courses/:id",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"courses",
+								":id"
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": "{{courseId}}",
+									"description": "Course ID"
+								}
+							]
+						},
+						"description": "Delete a course by ID. This will also delete all progress records for this course."
+					}
+				},
+				{
+					"name": "Get User Progress on Course",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/courses/:id/progress/:userId",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"courses",
+								":id",
+								"progress",
+								":userId"
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": "{{courseId}}",
+									"description": "Course ID"
+								},
+								{
+									"key": "userId",
+									"value": "{{userId}}",
+									"description": "User ID"
+								}
+							]
+						},
+						"description": "Get user progress on a specific course. Creates a progress record if one doesn't exist."
+					}
+				},
+				{
+					"name": "Update User Progress on Course",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"completedLessons\": [0, 1],\n  \"currentLesson\": 1\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/courses/:id/progress/:userId",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"courses",
+								":id",
+								"progress",
+								":userId"
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": "{{courseId}}",
+									"description": "Course ID"
+								},
+								{
+									"key": "userId",
+									"value": "{{userId}}",
+									"description": "User ID"
+								}
+							]
+						},
+						"description": "Update user progress on a course. completedLessons is an array of lesson indices (0-based). Progress percentage is calculated automatically."
+					}
+				},
+				{
+					"name": "Get All Courses with User Progress",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/courses/user/:userId/progress",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"courses",
+								"user",
+								":userId",
+								"progress"
+							],
+							"variable": [
+								{
+									"key": "userId",
+									"value": "{{userId}}",
+									"description": "User ID"
+								}
+							]
+						},
+						"description": "Get all courses with progress for a specific user"
+					}
+				}
+			]
 		}
 	],
 	"variable": [
@@ -348,6 +620,11 @@
 		},
 		{
 			"key": "userId",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "courseId",
 			"value": "",
 			"type": "string"
 		}
