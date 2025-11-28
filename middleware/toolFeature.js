@@ -61,6 +61,22 @@ exports.validateToolFeature = async (req, res, next) => {
         });
       }
 
+      // Check role requirement
+      if (feature.requiredRoles && Array.isArray(feature.requiredRoles) && feature.requiredRoles.length > 0) {
+        if (!req.user) {
+          return res.status(401).json({
+            success: false,
+            message: 'Authentication required for this feature',
+          });
+        }
+        if (!feature.requiredRoles.includes(req.user.role)) {
+          return res.status(403).json({
+            success: false,
+            message: `Access restricted to: ${feature.requiredRoles.join(', ')}`,
+          });
+        }
+      }
+
       // Check premium requirement - handle different possible premium field names
       if (feature.requiresPremium && req.user) {
         const isPremium = req.user.isPremium || req.user.subscription?.isPremium || req.user.subscription?.active;

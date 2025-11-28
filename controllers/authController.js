@@ -33,14 +33,24 @@ exports.register = async (req, res) => {
       });
     }
 
+    // Prevent role assignment during registration (roles can only be set by admins)
+    // Users always register as 'user' role by default
+    if (req.body.role && req.body.role !== 'user') {
+      return res.status(403).json({
+        success: false,
+        message: 'You cannot assign roles during registration. All users register with the default "user" role.',
+      });
+    }
+
     // Generate email verification token
     const { verificationToken, hashedToken } = generateVerificationToken();
 
-    // Create user
+    // Create user with default 'user' role
     const user = await User.create({
       fullName,
       email,
       password,
+      role: 'user', // Always set to 'user' during registration
       emailVerificationToken: hashedToken,
       emailVerificationExpire: Date.now() + 24 * 60 * 60 * 1000, // 24 hours
     });
