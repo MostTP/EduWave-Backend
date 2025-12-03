@@ -11,6 +11,7 @@ const {
 const badgeService = require('../utils/badgeService');
 
 // Get leaderboard (public, but can use optional auth to mark current user)
+// Optional query params: limit (default 20, max 100), offset (default 0), includeBadges (default false)
 router.get('/', getLeaderboard);
 
 // Get badge definitions

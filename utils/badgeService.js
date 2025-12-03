@@ -1,6 +1,7 @@
 const User = require('../models/User');
 const CourseProgress = require('../models/CourseProgress');
 const ForumPost = require('../models/Forum');
+const { GameStats } = require('../models/Game');
 
 // Badge definitions
 const ACHIEVEMENT_BADGES = {
@@ -236,6 +237,40 @@ async function checkGoalSetter(userId) {
   }
 }
 
+// Check quick learner badge (complete a course within 1 day)
+async function checkQuickLearner(userId) {
+  try {
+    const progressRecords = await CourseProgress.find({ user: userId, completed: true });
+    
+    for (const progress of progressRecords) {
+      if (progress.completedAt && progress.createdAt) {
+        const completionTime = progress.completedAt.getTime() - progress.createdAt.getTime();
+        const oneDay = 24 * 60 * 60 * 1000;
+        
+        if (completionTime < oneDay && completionTime > 0) {
+          await awardBadge(userId, 'quick_learner');
+          break; // Only need one course completed within 1 day
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error checking quick learner:', error);
+  }
+}
+
+// Check wave rider badge (win 5 games in a row)
+async function checkWaveRider(userId) {
+  try {
+    const gameStats = await GameStats.findOne({ user: userId });
+    
+    if (gameStats && gameStats.currentGameStreak >= 5) {
+      await awardBadge(userId, 'wave_rider');
+    }
+  } catch (error) {
+    console.error('Error checking wave rider:', error);
+  }
+}
+
 // Check all badges for a user
 async function checkAllBadges(userId) {
   await checkPointBadges(userId);
@@ -247,6 +282,8 @@ async function checkAllBadges(userId) {
   await checkTrending(userId);
   await checkDailyGrinder(userId);
   await checkGoalSetter(userId);
+  await checkQuickLearner(userId);
+  await checkWaveRider(userId);
 }
 
 module.exports = {
@@ -261,6 +298,8 @@ module.exports = {
   checkTrending,
   checkDailyGrinder,
   checkGoalSetter,
+  checkQuickLearner,
+  checkWaveRider,
   checkAllBadges,
   ACHIEVEMENT_BADGES,
   POINT_BADGES,

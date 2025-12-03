@@ -3,30 +3,84 @@ const User = require('../models/User');
 // Get leaderboard (top users by points)
 exports.getLeaderboard = async (req, res) => {
   try {
-    const { limit = 20 } = req.query;
+    const { limit = 20, offset = 0, includeBadges = false } = req.query;
     const currentUserEmail = req.user ? req.user.email : null;
+    const currentUserId = req.user ? req.user._id.toString() : null;
 
-    const users = await User.find()
-      .select('fullName email points createdAt')
-      .sort({ points: -1 })
-      .limit(parseInt(limit))
-      .lean();
+    // Validate limit
+    const limitNum = Math.min(parseInt(limit) || 20, 100); // Max 100 users
+    const offsetNum = Math.max(parseInt(offset) || 0, 0);
 
-    const leaderboard = users.map((user, index) => ({
-      rank: index + 1,
-      name: user.fullName,
-      email: user.email,
-      points: user.points || 0,
-      isCurrentUser: currentUserEmail && user.email === currentUserEmail,
-    }));
+    // Build query
+    let query = User.find().select('fullName email points createdAt badges');
+    
+    // Sort by points descending, then by createdAt ascending (earlier users rank higher if tied)
+    query = query.sort({ points: -1, createdAt: 1 });
+    
+    // Apply pagination
+    query = query.skip(offsetNum).limit(limitNum);
+    
+    const users = await query.lean();
+
+    // Calculate total users for pagination
+    const totalUsers = await User.countDocuments();
+
+    // Build leaderboard with proper ranking (accounting for ties)
+    const leaderboard = [];
+    let currentRank = offsetNum + 1;
+    let previousPoints = null;
+    let rankOffset = 0;
+
+    for (let i = 0; i < users.length; i++) {
+      const user = users[i];
+      const userPoints = user.points || 0;
+
+      // Handle tied ranks
+      if (previousPoints !== null && userPoints === previousPoints) {
+        rankOffset++;
+      } else {
+        currentRank += rankOffset;
+        rankOffset = 0;
+      }
+
+      const leaderboardEntry = {
+        rank: currentRank,
+        name: user.fullName,
+        email: user.email,
+        points: userPoints,
+        isCurrentUser: currentUserId && user._id.toString() === currentUserId,
+      };
+
+      // Include badges if requested
+      if (includeBadges === 'true' && user.badges) {
+        const earnedBadges = {
+          achievement: (user.badges.achievement || []).filter(b => b.earned).map(b => b.id),
+          point: (user.badges.point || []).filter(b => b.earned).map(b => b.id),
+        };
+        leaderboardEntry.badges = earnedBadges;
+        leaderboardEntry.badgeCount = earnedBadges.achievement.length + earnedBadges.point.length;
+      }
+
+      leaderboard.push(leaderboardEntry);
+      previousPoints = userPoints;
+      currentRank++;
+    }
 
     // Get current user's rank if authenticated
     let currentUserRank = null;
+    let currentUserPoints = null;
     if (req.user) {
       const currentUser = await User.findById(req.user._id).select('points');
       if (currentUser) {
+        currentUserPoints = currentUser.points || 0;
         const usersAbove = await User.countDocuments({
-          points: { $gt: currentUser.points || 0 },
+          $or: [
+            { points: { $gt: currentUserPoints } },
+            { 
+              points: currentUserPoints,
+              createdAt: { $lt: currentUser.createdAt }
+            }
+          ],
         });
         currentUserRank = usersAbove + 1;
       }
@@ -37,13 +91,18 @@ exports.getLeaderboard = async (req, res) => {
       data: {
         leaderboard,
         currentUserRank,
-        totalUsers: await User.countDocuments(),
+        currentUserPoints,
+        totalUsers,
+        limit: limitNum,
+        offset: offsetNum,
+        hasMore: offsetNum + limitNum < totalUsers,
       },
     });
   } catch (error) {
+    console.error('Error fetching leaderboard:', error);
     res.status(500).json({
       success: false,
-      message: error.message,
+      message: error.message || 'Failed to fetch leaderboard',
     });
   }
 };
@@ -156,7 +215,7 @@ exports.updateUserPoints = async (req, res) => {
 // Get current user's leaderboard position
 exports.getUserRank = async (req, res) => {
   try {
-    const user = await User.findById(req.user._id).select('points');
+    const user = await User.findById(req.user._id).select('points createdAt');
     
     if (!user) {
       return res.status(404).json({
@@ -165,11 +224,26 @@ exports.getUserRank = async (req, res) => {
       });
     }
 
+    const userPoints = user.points || 0;
+    
+    // Count users above (higher points OR same points but earlier registration)
     const usersAbove = await User.countDocuments({
-      points: { $gt: user.points || 0 },
+      $or: [
+        { points: { $gt: userPoints } },
+        { 
+          points: userPoints,
+          createdAt: { $lt: user.createdAt }
+        }
+      ],
     });
+    
     const rank = usersAbove + 1;
     const totalUsers = await User.countDocuments();
+
+    // Calculate percentile
+    const percentile = totalUsers > 0 
+      ? Math.round(((totalUsers - rank) / totalUsers) * 100)
+      : 0;
 
     // Check wave champion badge (top 3)
     const badgeService = require('../utils/badgeService');
@@ -179,14 +253,17 @@ exports.getUserRank = async (req, res) => {
       success: true,
       data: {
         rank,
-        points: user.points || 0,
+        points: userPoints,
         totalUsers,
+        percentile,
+        isTopThree: rank <= 3,
       },
     });
   } catch (error) {
+    console.error('Error fetching user rank:', error);
     res.status(500).json({
       success: false,
-      message: error.message,
+      message: error.message || 'Failed to fetch user rank',
     });
   }
 };
