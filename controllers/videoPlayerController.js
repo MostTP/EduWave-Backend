@@ -97,17 +97,40 @@ exports.completeLesson = async (req, res) => {
     // Find or create lesson progress
     let lessonProgress = progress.lessons.find(l => l.lessonId === parseInt(lessonId));
     if (!lessonProgress) {
-      lessonProgress = { lessonId: parseInt(lessonId), completed: false };
+      lessonProgress = { lessonId: parseInt(lessonId), completed: false, watchTime: 0 };
       progress.lessons.push(lessonProgress);
     }
 
-    // Mark lesson as completed if not already
+    // Get lesson duration to check 50% requirement
+    const lesson = course.lessons[lessonIndex];
+    const lessonDuration = lesson?.duration || '0';
+    
+    // Parse duration string (e.g., "1 hour", "30 mins", "45 minutes") to seconds
+    let lessonDurationSeconds = 0;
+    const durationLower = lessonDuration.toLowerCase();
+    if (durationLower.includes('hour')) {
+      const hours = parseFloat(durationLower) || 0;
+      lessonDurationSeconds = hours * 3600;
+    } else if (durationLower.includes('min')) {
+      const mins = parseFloat(durationLower) || 0;
+      lessonDurationSeconds = mins * 60;
+    } else {
+      // Try to parse as seconds if it's just a number
+      lessonDurationSeconds = parseFloat(lessonDuration) || 0;
+    }
+
+    // Check if user watched at least 50% of the lesson
+    const watchTime = lessonProgress.watchTime || 0;
+    const requiredWatchTime = lessonDurationSeconds * 0.5; // 50% of lesson duration
+    const hasWatchedEnough = watchTime >= requiredWatchTime;
+
+    // Mark lesson as completed if not already AND user watched 50%+
     let pointsAwarded = 0;
-    if (!lessonProgress.completed) {
+    if (!lessonProgress.completed && hasWatchedEnough) {
       lessonProgress.completed = true;
       lessonProgress.completedAt = new Date();
       
-      // Award points for lesson completion
+      // Award points for lesson completion (only if 50% watched)
       const user = await User.findById(req.user._id);
       if (user) {
         user.points = (user.points || 0) + 5; // Lesson completion points
@@ -119,6 +142,18 @@ exports.completeLesson = async (req, res) => {
         await badgeService.checkPointBadges(user._id);
         await badgeService.checkFirstStep(user._id);
       }
+    } else if (!hasWatchedEnough && !lessonProgress.completed) {
+      // User hasn't watched enough - don't award points
+      return res.status(400).json({
+        success: false,
+        message: `You must watch at least 50% of the lesson to complete it. You've watched ${Math.round(watchTime / 60)} minutes of ${Math.round(lessonDurationSeconds / 60)} minutes.`,
+        data: {
+          watchTime,
+          requiredWatchTime,
+          lessonDurationSeconds,
+          progress: Math.round((watchTime / lessonDurationSeconds) * 100),
+        },
+      });
     }
 
     // Calculate overall progress

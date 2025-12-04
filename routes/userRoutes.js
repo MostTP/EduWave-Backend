@@ -273,68 +273,95 @@ router.post('/track-tool', protect, async (req, res) => {
     const { toolId, toolName } = req.body;
     const user = await User.findById(req.user._id);
     
-    if (user) {
-      const today = new Date().toDateString();
-      const lastToolDate = user.lastToolUseDate ? new Date(user.lastToolUseDate).toDateString() : null;
-      const yesterday = new Date();
-      yesterday.setDate(yesterday.getDate() - 1);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+      });
+    }
 
-      // Update consecutive tool days
-      if (!lastToolDate) {
-        user.consecutiveToolDays = 1;
-      } else if (lastToolDate === yesterday.toDateString()) {
-        user.consecutiveToolDays = (user.consecutiveToolDays || 0) + 1;
-      } else if (lastToolDate !== today) {
-        user.consecutiveToolDays = 1;
+    const today = new Date().toDateString();
+    const lastToolDate = user.lastToolUseDate ? new Date(user.lastToolUseDate).toDateString() : null;
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    // Check if this tool was already used today to prevent duplicate points
+    const lastToolUsed = user.lastToolUsed;
+    const sameToolToday = lastToolUsed && 
+                          lastToolUsed.toolId === toolId && 
+                          lastToolDate === today;
+
+    // Update consecutive tool days
+    if (!lastToolDate) {
+      user.consecutiveToolDays = 1;
+    } else if (lastToolDate === yesterday.toDateString()) {
+      user.consecutiveToolDays = (user.consecutiveToolDays || 0) + 1;
+    } else if (lastToolDate !== today) {
+      user.consecutiveToolDays = 1;
+    }
+
+    user.lastToolUsed = {
+      toolId: toolId || 'unknown',
+      toolName: toolName || 'Unknown Tool',
+      usedAt: new Date(),
+    };
+    user.lastToolUseDate = new Date();
+    user.toolsUsedCount = (user.toolsUsedCount || 0) + 1;
+
+    // Award points only if this tool hasn't been used today (prevent duplicate points)
+    let pointsAwarded = 0;
+    if (!sameToolToday) {
+      user.points = (user.points || 0) + 1;
+      pointsAwarded = 1;
+    }
+
+    await user.save({ validateBeforeSave: false });
+    
+    // Check badges
+    const badgeService = require('../utils/badgeService');
+    if (pointsAwarded > 0) {
+      await badgeService.checkPointBadges(user._id);
+    }
+    await badgeService.checkFirstStep(user._id);
+    await badgeService.checkDailyGrinder(user._id);
+    
+    // Track study planner or analytics usage
+    if (toolId === 'study-planner' || toolName === 'Study Planner') {
+      const lastPlannerDate = user.lastStudyPlannerDate ? new Date(user.lastStudyPlannerDate).toDateString() : null;
+      if (!lastPlannerDate) {
+        user.studyPlannerDays = 1;
+      } else if (lastPlannerDate === yesterday.toDateString()) {
+        user.studyPlannerDays = (user.studyPlannerDays || 0) + 1;
+      } else if (lastPlannerDate !== today) {
+        user.studyPlannerDays = 1;
       }
-
-      user.lastToolUsed = {
-        toolId: toolId || 'unknown',
-        toolName: toolName || 'Unknown Tool',
-        usedAt: new Date(),
-      };
-      user.lastToolUseDate = new Date();
-      user.toolsUsedCount = (user.toolsUsedCount || 0) + 1;
+      user.lastStudyPlannerDate = new Date();
       await user.save({ validateBeforeSave: false });
-      
-      // Check badges
-      const badgeService = require('../utils/badgeService');
-      await badgeService.checkFirstStep(user._id);
-      await badgeService.checkDailyGrinder(user._id);
-      
-      // Track study planner or analytics usage
-      if (toolId === 'study-planner' || toolName === 'Study Planner') {
-        const lastPlannerDate = user.lastStudyPlannerDate ? new Date(user.lastStudyPlannerDate).toDateString() : null;
-        if (!lastPlannerDate) {
-          user.studyPlannerDays = 1;
-        } else if (lastPlannerDate === yesterday.toDateString()) {
-          user.studyPlannerDays = (user.studyPlannerDays || 0) + 1;
-        } else if (lastPlannerDate !== today) {
-          user.studyPlannerDays = 1;
-        }
-        user.lastStudyPlannerDate = new Date();
-        await user.save({ validateBeforeSave: false });
-        await badgeService.checkGoalSetter(user._id);
+      await badgeService.checkGoalSetter(user._id);
+    }
+    
+    if (toolId === 'progress-analytics' || toolName === 'Progress Analytics') {
+      const lastAnalyticsDate = user.lastAnalyticsDate ? new Date(user.lastAnalyticsDate).toDateString() : null;
+      if (!lastAnalyticsDate) {
+        user.analyticsDays = 1;
+      } else if (lastAnalyticsDate === yesterday.toDateString()) {
+        user.analyticsDays = (user.analyticsDays || 0) + 1;
+      } else if (lastAnalyticsDate !== today) {
+        user.analyticsDays = 1;
       }
-      
-      if (toolId === 'progress-analytics' || toolName === 'Progress Analytics') {
-        const lastAnalyticsDate = user.lastAnalyticsDate ? new Date(user.lastAnalyticsDate).toDateString() : null;
-        if (!lastAnalyticsDate) {
-          user.analyticsDays = 1;
-        } else if (lastAnalyticsDate === yesterday.toDateString()) {
-          user.analyticsDays = (user.analyticsDays || 0) + 1;
-        } else if (lastAnalyticsDate !== today) {
-          user.analyticsDays = 1;
-        }
-        user.lastAnalyticsDate = new Date();
-        await user.save({ validateBeforeSave: false });
-        await badgeService.checkGoalSetter(user._id);
-      }
+      user.lastAnalyticsDate = new Date();
+      await user.save({ validateBeforeSave: false });
+      await badgeService.checkGoalSetter(user._id);
     }
 
     res.status(200).json({
       success: true,
       message: 'Tool usage tracked',
+      data: {
+        pointsAwarded,
+        totalPoints: user.points || 0,
+        alreadyUsedToday: sameToolToday,
+      },
     });
   } catch (error) {
     res.status(500).json({

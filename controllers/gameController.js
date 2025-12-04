@@ -159,18 +159,37 @@ exports.joinDuel = async (req, res) => {
 
     // Check opponent's duel limits
     const opponentStats = await getOrCreateStats(req.user._id);
+    const opponentUser = await User.findById(req.user._id);
+    const isOpponentPremium = opponentUser.isPro || (opponentUser.trialStartDate && !opponentUser.trialExpired);
+    
     const today = new Date().toISOString().split('T')[0];
+    const currentWeek = new Date().toISOString().split('T')[0].substring(0, 7) + '-' + 
+      Math.ceil(new Date().getDate() / 7);
     
     if (opponentStats.lastDuelDate && new Date(opponentStats.lastDuelDate).toISOString().split('T')[0] !== today) {
       opponentStats.duelsToday = 0;
       opponentStats.lastDuelDate = new Date();
     }
 
-    const dailyLimit = 1;
+    if (opponentStats.lastDuelWeek !== currentWeek) {
+      opponentStats.duelsThisWeek = 0;
+      opponentStats.lastDuelWeek = currentWeek;
+    }
+
+    const dailyLimit = isOpponentPremium ? 5 : 1;
+    const weeklyLimit = isOpponentPremium ? 20 : 3;
+
     if (opponentStats.duelsToday >= dailyLimit) {
       return res.status(403).json({
         success: false,
-        message: 'You have reached your daily duel limit',
+        message: `Daily duel limit reached (${dailyLimit} per day). ${isOpponentPremium ? '' : 'Upgrade to Premium for 5 duels per day.'}`,
+      });
+    }
+
+    if (opponentStats.duelsThisWeek >= weeklyLimit) {
+      return res.status(403).json({
+        success: false,
+        message: `Weekly duel limit reached (${weeklyLimit} per week). ${isOpponentPremium ? '' : 'Upgrade to Premium for 20 duels per week.'}`,
       });
     }
 
@@ -182,7 +201,9 @@ exports.joinDuel = async (req, res) => {
 
     // Update opponent stats
     opponentStats.duelsToday += 1;
+    opponentStats.duelsThisWeek += 1;
     opponentStats.lastDuelDate = new Date();
+    opponentStats.lastDuelWeek = currentWeek;
     await opponentStats.save();
 
     res.status(200).json({
@@ -258,19 +279,7 @@ exports.startDuel = async (req, res) => {
       });
     }
 
-    // Update host stats
-    const hostStats = await getOrCreateStats(req.user._id);
-    const today = new Date().toISOString().split('T')[0];
-    
-    if (hostStats.lastDuelDate && new Date(hostStats.lastDuelDate).toISOString().split('T')[0] !== today) {
-      hostStats.duelsToday = 0;
-      hostStats.lastDuelDate = new Date();
-    }
-
-    hostStats.duelsToday += 1;
-    hostStats.lastDuelDate = new Date();
-    await hostStats.save();
-
+    // Don't increment stats here - already done when creating/joining
     duel.status = 'started';
     duel.startedAt = new Date();
     await duel.save();
@@ -319,6 +328,19 @@ exports.submitGameResult = async (req, res) => {
       return res.status(404).json({
         success: false,
         message: 'Duel not found',
+      });
+    }
+
+    // If game is forfeited, don't award points (0 points for quit/forfeit)
+    if (duel.status === 'forfeited') {
+      return res.status(200).json({
+        success: true,
+        data: {
+          duel,
+          isComplete: true,
+          pointsAwarded: 0,
+          message: 'Game was forfeited - no points awarded',
+        },
       });
     }
 
@@ -474,6 +496,12 @@ exports.getGameStats = async (req, res) => {
 
     await stats.save();
 
+    // Get user premium status for limits
+    const user = await User.findById(req.user._id);
+    const isPremium = user.isPro || (user.trialStartDate && !user.trialExpired);
+    const dailyLimit = isPremium ? 5 : 1;
+    const weeklyLimit = isPremium ? 20 : 3;
+
     res.status(200).json({
       success: true,
       data: {
@@ -483,8 +511,9 @@ exports.getGameStats = async (req, res) => {
         pointsEarned: stats.pointsEarned,
         duelsToday: stats.duelsToday,
         duelsThisWeek: stats.duelsThisWeek,
-        dailyLimit: 1, // Can be made configurable
-        weeklyLimit: 3,
+        dailyLimit,
+        weeklyLimit,
+        isPremium,
       },
     });
   } catch (error) {
@@ -546,3 +575,128 @@ function getWeekStart() {
   return new Date(now.setDate(diff)).toISOString().split('T')[0];
 }
 
+// Simple question bank (subset from frontend)
+const questionBank = {
+  general: [
+    { q: "What is the capital of France?", a: ["Paris", "London", "Berlin", "Madrid"], correct: 0 },
+    { q: "Which planet is known as the Red Planet?", a: ["Mars", "Venus", "Jupiter", "Saturn"], correct: 0 },
+    { q: "Who painted the Mona Lisa?", a: ["Leonardo da Vinci", "Michelangelo", "Raphael", "Donatello"], correct: 0 },
+    { q: "What is the largest ocean on Earth?", a: ["Pacific Ocean", "Atlantic Ocean", "Indian Ocean", "Arctic Ocean"], correct: 0 },
+    { q: "How many continents are there?", a: ["7", "5", "6", "8"], correct: 0 },
+    { q: "What is the chemical symbol for gold?", a: ["Au", "Ag", "Fe", "Cu"], correct: 0 },
+    { q: "What year did World War II end?", a: ["1945", "1944", "1946", "1943"], correct: 0 },
+    { q: "Who wrote 'Romeo and Juliet'?", a: ["William Shakespeare", "Charles Dickens", "Jane Austen", "Mark Twain"], correct: 0 },
+  ],
+  tech: [
+    { q: "What does HTML stand for?", a: ["HyperText Markup Language", "High Tech Modern Language", "Home Tool Markup Language", "Hyperlinks and Text Markup Language"], correct: 0 },
+    { q: "Who is the founder of Microsoft?", a: ["Bill Gates", "Steve Jobs", "Mark Zuckerberg", "Elon Musk"], correct: 0 },
+    { q: "What does CPU stand for?", a: ["Central Processing Unit", "Computer Personal Unit", "Central Program Utility", "Computer Processing Utility"], correct: 0 },
+    { q: "Which programming language is known as the 'language of the web'?", a: ["JavaScript", "Python", "Java", "C++"], correct: 0 },
+    { q: "What does AI stand for?", a: ["Artificial Intelligence", "Advanced Integration", "Automated Interface", "Analytical Information"], correct: 0 },
+    { q: "Who invented the World Wide Web?", a: ["Tim Berners-Lee", "Bill Gates", "Steve Jobs", "Mark Zuckerberg"], correct: 0 },
+    { q: "What year was Google founded?", a: ["1998", "1995", "2000", "1996"], correct: 0 },
+    { q: "Which company developed the iPhone?", a: ["Apple", "Samsung", "Google", "Microsoft"], correct: 0 },
+  ],
+  science: [
+    { q: "What is the chemical symbol for water?", a: ["H2O", "CO2", "O2", "H2"], correct: 0 },
+    { q: "How many bones are in the human body?", a: ["206", "205", "207", "200"], correct: 0 },
+    { q: "What is the speed of light?", a: ["300,000 km/s", "150,000 km/s", "450,000 km/s", "200,000 km/s"], correct: 0 },
+    { q: "What is the largest organ in the human body?", a: ["Skin", "Liver", "Heart", "Brain"], correct: 0 },
+    { q: "What gas do plants absorb from the atmosphere?", a: ["Carbon Dioxide", "Oxygen", "Nitrogen", "Hydrogen"], correct: 0 },
+    { q: "What is the powerhouse of the cell?", a: ["Mitochondria", "Nucleus", "Ribosome", "Chloroplast"], correct: 0 },
+    { q: "What is the closest planet to the Sun?", a: ["Mercury", "Venus", "Earth", "Mars"], correct: 0 },
+    { q: "What is the boiling point of water?", a: ["100°C", "90°C", "110°C", "120°C"], correct: 0 },
+  ],
+  history: [
+    { q: "Who was the first President of the United States?", a: ["George Washington", "Thomas Jefferson", "Abraham Lincoln", "John Adams"], correct: 0 },
+    { q: "In what year did the Titanic sink?", a: ["1912", "1910", "1915", "1920"], correct: 0 },
+    { q: "Who discovered America in 1492?", a: ["Christopher Columbus", "Amerigo Vespucci", "Ferdinand Magellan", "Vasco da Gama"], correct: 0 },
+    { q: "What year did the Berlin Wall fall?", a: ["1989", "1985", "1990", "1991"], correct: 0 },
+    { q: "Who was the first man to walk on the moon?", a: ["Neil Armstrong", "Buzz Aldrin", "Yuri Gagarin", "John Glenn"], correct: 0 },
+    { q: "What empire was ruled by Julius Caesar?", a: ["Roman Empire", "Greek Empire", "Persian Empire", "Ottoman Empire"], correct: 0 },
+    { q: "Which war was fought between the North and South in the United States?", a: ["Civil War", "Revolutionary War", "World War I", "World War II"], correct: 0 },
+    { q: "Who invented the printing press?", a: ["Johannes Gutenberg", "Leonardo da Vinci", "Galileo Galilei", "Isaac Newton"], correct: 0 },
+  ],
+  math: [
+    { q: "What is 15 × 8?", a: ["120", "115", "125", "130"], correct: 0 },
+    { q: "What is the square root of 144?", a: ["12", "11", "13", "14"], correct: 0 },
+    { q: "What is 25% of 200?", a: ["50", "45", "55", "60"], correct: 0 },
+    { q: "What is the value of Pi (π) to 2 decimal places?", a: ["3.14", "3.15", "3.13", "3.16"], correct: 0 },
+    { q: "What is 7³ (7 cubed)?", a: ["343", "49", "147", "243"], correct: 0 },
+    { q: "What is the sum of angles in a triangle?", a: ["180°", "360°", "90°", "270°"], correct: 0 },
+    { q: "What is 12 × 12?", a: ["144", "124", "134", "154"], correct: 0 },
+    { q: "What is 150 ÷ 3?", a: ["50", "45", "55", "60"], correct: 0 },
+  ],
+  geography: [
+    { q: "Which country has the most islands?", a: ["Sweden", "Canada", "Indonesia", "Philippines"], correct: 0 },
+    { q: "What is the world's longest river?", a: ["Nile", "Amazon", "Yangtze", "Mississippi"], correct: 1 },
+    { q: "Which is the largest desert in the world?", a: ["Antarctica", "Sahara", "Arabian", "Gobi"], correct: 0 },
+    { q: "What is the smallest continent?", a: ["Australia", "Europe", "Antarctica", "South America"], correct: 0 },
+    { q: "What is the capital of Australia?", a: ["Canberra", "Sydney", "Melbourne", "Perth"], correct: 0 },
+    { q: "Which mountain is the highest in the world?", a: ["Mount Everest", "K2", "Kangchenjunga", "Lhotse"], correct: 0 },
+    { q: "Which ocean is the largest?", a: ["Pacific", "Atlantic", "Indian", "Arctic"], correct: 0 },
+    { q: "What is the capital of Brazil?", a: ["Brasília", "Rio de Janeiro", "São Paulo", "Buenos Aires"], correct: 0 },
+  ],
+  sports: [
+    { q: "How many players are on a soccer team?", a: ["11", "10", "12", "9"], correct: 0 },
+    { q: "Which country won the 2022 FIFA World Cup?", a: ["Argentina", "France", "Brazil", "Germany"], correct: 0 },
+    { q: "In which sport would you perform a slam dunk?", a: ["Basketball", "Volleyball", "Tennis", "Soccer"], correct: 0 },
+    { q: "How many rounds are in a boxing match?", a: ["12", "10", "15", "8"], correct: 0 },
+    { q: "Which country has won the most Olympic gold medals?", a: ["United States", "Russia", "China", "Germany"], correct: 0 },
+    { q: "In tennis, what is a zero score called?", a: ["Love", "Nil", "Zero", "Null"], correct: 0 },
+    { q: "Which sport uses a shuttlecock?", a: ["Badminton", "Tennis", "Squash", "Table Tennis"], correct: 0 },
+    { q: "How many players are on a baseball team?", a: ["9", "10", "11", "8"], correct: 0 },
+  ],
+  movies: [
+    { q: "Who directed the movie 'Jurassic Park'?", a: ["Steven Spielberg", "James Cameron", "George Lucas", "Peter Jackson"], correct: 0 },
+    { q: "Which actor played Jack in 'Titanic'?", a: ["Leonardo DiCaprio", "Brad Pitt", "Johnny Depp", "Tom Cruise"], correct: 0 },
+    { q: "What year was the first 'Star Wars' movie released?", a: ["1977", "1975", "1980", "1979"], correct: 0 },
+    { q: "Who played the Joker in 'The Dark Knight'?", a: ["Heath Ledger", "Joaquin Phoenix", "Jack Nicholson", "Jared Leto"], correct: 0 },
+    { q: "Which movie features the song 'My Heart Will Go On'?", a: ["Titanic", "The Bodyguard", "Ghost", "Pretty Woman"], correct: 0 },
+    { q: "What is the highest-grossing film of all time?", a: ["Avatar", "Avengers: Endgame", "Titanic", "Star Wars: The Force Awakens"], correct: 0 },
+    { q: "Who directed the 'Lord of the Rings' trilogy?", a: ["Peter Jackson", "Steven Spielberg", "James Cameron", "Christopher Nolan"], correct: 0 },
+    { q: "Which actor played Iron Man in the Marvel Cinematic Universe?", a: ["Robert Downey Jr.", "Chris Evans", "Chris Hemsworth", "Mark Ruffalo"], correct: 0 },
+  ],
+};
+
+// Generate questions for a game
+exports.generateQuestions = async (req, res) => {
+  try {
+    const { topic, numQuestions } = req.query;
+    
+    if (!topic || !numQuestions) {
+      return res.status(400).json({
+        success: false,
+        message: 'Topic and number of questions are required',
+      });
+    }
+
+    let pool = [];
+    if (topic === 'mixed') {
+      // Mix all categories
+      Object.values(questionBank).forEach(category => {
+        pool = pool.concat(category);
+      });
+    } else {
+      pool = questionBank[topic] || questionBank.general;
+    }
+
+    // Shuffle and select
+    const shuffled = pool.sort(() => Math.random() - 0.5);
+    const selected = shuffled.slice(0, parseInt(numQuestions));
+
+    res.status(200).json({
+      success: true,
+      data: {
+        questions: selected,
+        topic,
+        count: selected.length,
+      },
+    });
+  } catch (error) {
+    res.status(400).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};

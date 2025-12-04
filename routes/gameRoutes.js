@@ -9,6 +9,7 @@ const {
   submitGameResult,
   getGameStats,
   cancelDuel,
+  generateQuestions,
 } = require('../controllers/gameController');
 
 // All routes require authentication
