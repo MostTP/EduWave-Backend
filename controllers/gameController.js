@@ -158,54 +158,12 @@ exports.joinDuel = async (req, res) => {
       });
     }
 
-    // Check opponent's duel limits
-    const opponentStats = await getOrCreateStats(req.user._id);
-    const opponentUser = await User.findById(req.user._id);
-    const isOpponentPremium = opponentUser.isPro || (opponentUser.trialStartDate && !opponentUser.trialExpired);
-    
-    const today = new Date().toISOString().split('T')[0];
-    const currentWeek = new Date().toISOString().split('T')[0].substring(0, 7) + '-' + 
-      Math.ceil(new Date().getDate() / 7);
-    
-    if (opponentStats.lastDuelDate && new Date(opponentStats.lastDuelDate).toISOString().split('T')[0] !== today) {
-      opponentStats.duelsToday = 0;
-      opponentStats.lastDuelDate = new Date();
-    }
-
-    if (opponentStats.lastDuelWeek !== currentWeek) {
-      opponentStats.duelsThisWeek = 0;
-      opponentStats.lastDuelWeek = currentWeek;
-    }
-
-    const dailyLimit = isOpponentPremium ? 5 : 1;
-    const weeklyLimit = isOpponentPremium ? 20 : 3;
-
-    if (opponentStats.duelsToday >= dailyLimit) {
-      return res.status(403).json({
-        success: false,
-        message: `Daily duel limit reached (${dailyLimit} per day). ${isOpponentPremium ? '' : 'Upgrade to Premium for 5 duels per day.'}`,
-      });
-    }
-
-    if (opponentStats.duelsThisWeek >= weeklyLimit) {
-      return res.status(403).json({
-        success: false,
-        message: `Weekly duel limit reached (${weeklyLimit} per week). ${isOpponentPremium ? '' : 'Upgrade to Premium for 20 duels per week.'}`,
-      });
-    }
-
+    // Joining duels is unlimited for all users - no limit checks needed
     // Update duel
     duel.opponentId = req.user._id;
     duel.opponentName = req.user.fullName;
     duel.status = 'locked';
     await duel.save();
-
-    // Update opponent stats
-    opponentStats.duelsToday += 1;
-    opponentStats.duelsThisWeek += 1;
-    opponentStats.lastDuelDate = new Date();
-    opponentStats.lastDuelWeek = currentWeek;
-    await opponentStats.save();
 
     res.status(200).json({
       success: true,

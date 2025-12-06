@@ -18,6 +18,16 @@ const userSchema = new mongoose.Schema({
       'Please add a valid email'
     ],
   },
+  username: {
+    type: String,
+    unique: true,
+    sparse: true, // Allows multiple null values
+    trim: true,
+    lowercase: true,
+    minlength: [3, 'Username must be at least 3 characters'],
+    maxlength: [30, 'Username cannot exceed 30 characters'],
+    match: [/^[a-zA-Z0-9_]+$/, 'Username can only contain letters, numbers, and underscores'],
+  },
   password: {
     type: String,
     required: [true, 'Please add a password'],
@@ -124,6 +134,12 @@ const userSchema = new mongoose.Schema({
     type: Number,
     default: 0,
   },
+  toolsUsed: [{
+    toolId: String,
+    toolName: String,
+    firstUsedAt: Date,
+    lastUsedAt: Date,
+  }],
   consecutiveToolDays: {
     type: Number,
     default: 0,

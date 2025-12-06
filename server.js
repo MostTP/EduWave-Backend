@@ -119,6 +119,26 @@ app.use((req, res) => {
 
 const PORT = process.env.PORT || 3000;
 
+// Set up periodic check for study planner reminders (every hour)
+const { checkStudyPlannerReminders } = require('./controllers/notificationController');
+
+// Check reminders immediately on server start (after DB connection)
+setTimeout(async () => {
+  if (mongoose.connection.readyState === 1) {
+    console.log('Checking study planner reminders...');
+    const result = await checkStudyPlannerReminders();
+    console.log(`Study planner reminders checked: ${result.checked || 0} sessions, ${result.remindersSent || 0} reminders sent`);
+  }
+}, 5000); // Wait 5 seconds for DB connection
+
+// Check reminders every hour
+setInterval(async () => {
+  if (mongoose.connection.readyState === 1) {
+    const result = await checkStudyPlannerReminders();
+    console.log(`Study planner reminders checked: ${result.checked || 0} sessions, ${result.remindersSent || 0} reminders sent`);
+  }
+}, 60 * 60 * 1000); // Every hour
+
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });

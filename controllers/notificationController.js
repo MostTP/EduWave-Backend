@@ -1,4 +1,52 @@
 const Notification = require('../models/Notification');
+const User = require('../models/User');
+
+// Helper function to create notification for a user
+async function createNotificationForUser(userId, title, message, type = 'info', link = null) {
+  try {
+    if (!userId) {
+      console.error('Error creating notification: userId is required');
+      return null;
+    }
+    
+    const notification = await Notification.create({
+      user: userId,
+      title,
+      message,
+      type,
+      link,
+    });
+    
+    console.log(`✅ Notification created for user ${userId}: ${title}`);
+    return notification;
+  } catch (error) {
+    console.error('Error creating notification:', error);
+    return null;
+  }
+}
+
+// Helper function to create notifications for all users
+async function createNotificationForAllUsers(title, message, type = 'info', link = null) {
+  try {
+    const users = await User.find().select('_id');
+    console.log(`📢 Creating notifications for ${users.length} users: ${title}`);
+    
+    const notifications = [];
+    
+    for (const user of users) {
+      const notification = await createNotificationForUser(user._id, title, message, type, link);
+      if (notification) {
+        notifications.push(notification);
+      }
+    }
+    
+    console.log(`✅ Created ${notifications.length} notifications for all users`);
+    return notifications;
+  } catch (error) {
+    console.error('Error creating notifications for all users:', error);
+    return [];
+  }
+}
 
 // Get user notifications
 exports.getNotifications = async (req, res) => {
@@ -166,4 +214,81 @@ exports.getUnreadCount = async (req, res) => {
     });
   }
 };
+
+// Check and send study planner reminders
+exports.checkStudyPlannerReminders = async () => {
+  try {
+    const { StudySession } = require('../models/StudyPlan');
+    const now = new Date();
+    
+    // Find upcoming study sessions that are not completed
+    const upcomingSessions = await StudySession.find({
+      completed: false,
+      date: { $gte: now },
+    }).populate('user', 'fullName email');
+    
+    let remindersSent = 0;
+    
+    for (const session of upcomingSessions) {
+      const timeUntilSession = session.date.getTime() - now.getTime();
+      const hoursUntil = timeUntilSession / (1000 * 60 * 60);
+      
+      // Initialize remindersSent if not exists
+      if (!session.remindersSent) {
+        session.remindersSent = { '24h': false, '12h': false, '3h': false };
+      }
+      
+      // Check for 24-hour reminder (24h to 12h before)
+      if (hoursUntil <= 24 && hoursUntil > 12 && !session.remindersSent['24h']) {
+        await createNotificationForUser(
+          session.user._id,
+          'Study Session Reminder - 24 Hours',
+          `Your study session "${session.topic}" for ${session.subject} is in 24 hours (${session.date.toLocaleString()})`,
+          'warning',
+          '/study-planner.html'
+        );
+        session.remindersSent['24h'] = true;
+        remindersSent++;
+        await session.save();
+      }
+      
+      // Check for 12-hour reminder (12h to 3h before)
+      if (hoursUntil <= 12 && hoursUntil > 3 && !session.remindersSent['12h']) {
+        await createNotificationForUser(
+          session.user._id,
+          'Study Session Reminder - 12 Hours',
+          `Your study session "${session.topic}" for ${session.subject} is in 12 hours (${session.date.toLocaleString()})`,
+          'warning',
+          '/study-planner.html'
+        );
+        session.remindersSent['12h'] = true;
+        remindersSent++;
+        await session.save();
+      }
+      
+      // Check for 3-hour reminder (3h to 0h before)
+      if (hoursUntil <= 3 && hoursUntil > 0 && !session.remindersSent['3h']) {
+        await createNotificationForUser(
+          session.user._id,
+          'Study Session Reminder - 3 Hours',
+          `Your study session "${session.topic}" for ${session.subject} is in 3 hours (${session.date.toLocaleString()})`,
+          'warning',
+          '/study-planner.html'
+        );
+        session.remindersSent['3h'] = true;
+        remindersSent++;
+        await session.save();
+      }
+    }
+    
+    return { checked: upcomingSessions.length, remindersSent };
+  } catch (error) {
+    console.error('Error checking study planner reminders:', error);
+    return { error: error.message };
+  }
+};
+
+// Export helper functions for use in other controllers
+exports.createNotificationForUser = createNotificationForUser;
+exports.createNotificationForAllUsers = createNotificationForAllUsers;
 

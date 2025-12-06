@@ -41,6 +41,11 @@ const studySessionSchema = new mongoose.Schema({
   completedAt: {
     type: Date,
   },
+  remindersSent: {
+    '24h': { type: Boolean, default: false },
+    '12h': { type: Boolean, default: false },
+    '3h': { type: Boolean, default: false },
+  },
   user: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',

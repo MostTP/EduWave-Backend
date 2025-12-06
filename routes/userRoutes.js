@@ -306,7 +306,31 @@ router.post('/track-tool', protect, async (req, res) => {
       usedAt: new Date(),
     };
     user.lastToolUseDate = new Date();
-    user.toolsUsedCount = (user.toolsUsedCount || 0) + 1;
+    
+    // Track unique tools used (not total count)
+    if (!user.toolsUsed) {
+      user.toolsUsed = [];
+    }
+    
+    // Check if this tool was already used before
+    const existingTool = user.toolsUsed.find(t => t.toolId === toolId);
+    const now = new Date();
+    
+    if (existingTool) {
+      // Update last used date for existing tool
+      existingTool.lastUsedAt = now;
+    } else {
+      // Add new unique tool
+      user.toolsUsed.push({
+        toolId: toolId || 'unknown',
+        toolName: toolName || 'Unknown Tool',
+        firstUsedAt: now,
+        lastUsedAt: now,
+      });
+    }
+    
+    // Update toolsUsedCount to reflect unique tools count
+    user.toolsUsedCount = user.toolsUsed.length;
 
     // Award points only if this tool hasn't been used today (prevent duplicate points)
     let pointsAwarded = 0;

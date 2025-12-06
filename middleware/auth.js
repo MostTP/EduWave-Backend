@@ -41,6 +41,35 @@ exports.protect = async (req, res, next) => {
   }
 };
 
+// Optional authentication - sets req.user if token is valid, but doesn't require it
+exports.optionalAuth = async (req, res, next) => {
+  let token;
+
+  // Check for token in Authorization header
+  if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+    token = req.headers.authorization.split(' ')[1];
+  }
+
+  // If no token, continue without setting req.user
+  if (!token) {
+    return next();
+  }
+
+  try {
+    // Verify token
+    const decoded = jwt.verify(token, process.env.JWT_ACCESS_SECRET || 'your-access-secret-key');
+
+    // Get user from token
+    req.user = await User.findById(decoded.id);
+    
+    // Continue even if user not found (optional auth)
+    next();
+  } catch (error) {
+    // Continue without setting req.user if token is invalid (optional auth)
+    next();
+  }
+};
+
 // Authorize routes - check user role
 // Usage: authorize('admin', 'instructor') or authorize('admin')
 exports.authorize = (...roles) => {

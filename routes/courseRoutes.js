@@ -3,7 +3,7 @@ const router = express.Router();
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs').promises;
-const { protect } = require('../middleware/auth');
+const { protect, optionalAuth } = require('../middleware/auth');
 const {
   createCourse,
   getMyCourses,
@@ -86,8 +86,8 @@ router.post('/upload', protect, upload.array('files', 10), async (req, res) => {
   }
 });
 
-// Public route - Get course by access code
-router.get('/access/:accessCode', getCourseByAccessCode);
+// Public route - Get course by access code (optional auth for notifications)
+router.get('/access/:accessCode', optionalAuth, getCourseByAccessCode);
 
 // Protected routes - specific routes must come before parameterized routes
 router.post('/', protect, createCourse);
@@ -104,8 +104,8 @@ router.put('/:courseId', protect, updateCourse);
 router.delete('/:courseId', protect, deleteCourse);
 router.post('/:courseId/enroll', protect, enrollInCourse);
 
-// Public route - Get course by ID (must be last to avoid matching specific routes)
-router.get('/:courseId', getCourseById);
+// Public route - Get course by ID (optional auth for notifications)
+router.get('/:courseId', optionalAuth, getCourseById);
 
 module.exports = router;
 

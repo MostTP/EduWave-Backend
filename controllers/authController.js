@@ -146,21 +146,27 @@ exports.login = async (req, res) => {
       });
     }
 
-    // Update login streak
-    const today = new Date().toDateString();
-    const lastLogin = user.lastLoginDate ? new Date(user.lastLoginDate).toDateString() : null;
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
+    // Update login streak (24-hour check instead of day-based)
+    const now = new Date();
+    const lastLoginDate = user.lastLoginDate ? new Date(user.lastLoginDate) : null;
 
-    if (!lastLogin) {
+    if (!lastLoginDate) {
+      // First login
       user.loginStreak = 1;
-    } else if (lastLogin === yesterday.toDateString()) {
-      user.loginStreak = (user.loginStreak || 0) + 1;
-    } else if (lastLogin !== today) {
-      user.loginStreak = 1;
+    } else {
+      // Calculate hours since last login
+      const hoursSinceLastLogin = (now - lastLoginDate) / (1000 * 60 * 60);
+      
+      if (hoursSinceLastLogin <= 24) {
+        // Logged in within 24 hours - increment streak
+        user.loginStreak = (user.loginStreak || 0) + 1;
+      } else {
+        // More than 24 hours passed - streak broken, reset to 1
+        user.loginStreak = 1;
+      }
     }
 
-    user.lastLoginDate = new Date();
+    user.lastLoginDate = now;
 
     // Check consistent badge (30 day streak)
     const badgeService = require('../utils/badgeService');

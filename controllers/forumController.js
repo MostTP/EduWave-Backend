@@ -1,5 +1,27 @@
 const ForumPost = require('../models/Forum');
 const User = require('../models/User');
+const AdminSettings = require('../models/AdminSettings');
+
+// Helper function to check if user is premium (validates trial expiration)
+async function checkUserPremium(user, settings) {
+  if (user.isPro) return true;
+
+  if (user.trialStartDate) {
+    const trialStart = new Date(user.trialStartDate);
+    const now = new Date();
+    const daysSinceStart = Math.floor((now - trialStart) / (1000 * 60 * 60 * 24));
+    const trialDuration = settings.trialDuration || 60;
+
+    if (daysSinceStart <= trialDuration) {
+      return true;
+    } else if (!user.trialExpired) {
+      user.trialExpired = true;
+      await user.save();
+    }
+  }
+
+  return false;
+}
 
 // Get all posts (with optional category filter)
 exports.getPosts = async (req, res) => {
@@ -69,7 +91,12 @@ exports.createPost = async (req, res) => {
 
     // Check if user is premium (free users can only reply)
     const user = await User.findById(req.user._id);
-    if (!user.isPro && !user.trialStartDate) {
+    const settings = await AdminSettings.getSettings();
+    
+    // Use proper premium check that validates trial expiration
+    const isPremium = await checkUserPremium(user, settings);
+    
+    if (!isPremium) {
       return res.status(403).json({
         success: false,
         message: 'Free users can only reply to posts. Upgrade to Premium to create posts.',
@@ -233,6 +260,16 @@ exports.addReply = async (req, res) => {
         const badgeService = require('../utils/badgeService');
         await badgeService.checkTrending(postAuthor._id);
         await badgeService.checkPointBadges(postAuthor._id);
+        
+        // Notify post author about the new reply
+        const { createNotificationForUser } = require('./notificationController');
+        await createNotificationForUser(
+          postAuthor._id,
+          'New Reply to Your Post',
+          `${req.user.fullName} replied to your post: "${post.title}"`,
+          'info',
+          `/forum.html?post=${post._id}`
+        );
       }
     }
 

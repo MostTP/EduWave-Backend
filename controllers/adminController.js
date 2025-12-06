@@ -211,6 +211,15 @@ exports.createAnnouncement = async (req, res) => {
       createdBy: req.user._id,
     });
 
+    // Notify all users about the new announcement
+    const { createNotificationForAllUsers } = require('./notificationController');
+    await createNotificationForAllUsers(
+      `New Announcement: ${title}`,
+      message,
+      'info',
+      '/dashboard' // Link to dashboard where announcements are shown
+    );
+
     res.status(201).json({
       success: true,
       data: announcement,

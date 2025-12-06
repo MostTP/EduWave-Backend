@@ -11,7 +11,7 @@ const adminSettingsSchema = new mongoose.Schema({
   },
   courseLimitFree: {
     type: Number,
-    default: 2, // courses per month for free users
+    default: 1, // courses per month for free users
   },
   courseLimit: {
     type: Number,

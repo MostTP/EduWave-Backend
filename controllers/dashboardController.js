@@ -18,8 +18,11 @@ exports.getDashboardStats = async (req, res) => {
     const pointBadges = user.badges?.point?.filter(b => b.earned).length || 0;
     const badgesEarned = achievementBadges + pointBadges;
 
-    // Tools used count
-    const toolsUsed = user.toolsUsedCount || 0;
+    // Tools used count (unique tools)
+    // Use toolsUsed array length if available, otherwise fallback to toolsUsedCount
+    const toolsUsed = user.toolsUsed && Array.isArray(user.toolsUsed) 
+      ? user.toolsUsed.length 
+      : (user.toolsUsedCount || 0);
 
     // Forum posts count
     const forumPosts = user.forumStats?.posts || 0;
