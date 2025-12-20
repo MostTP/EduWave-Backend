@@ -59,6 +59,30 @@ async function awardBadge(userId, badgeId, isPointBadge = false) {
       badge.earned = true;
       badge.earnedAt = new Date();
       await user.save({ validateBeforeSave: false });
+
+      // Create an in-app notification for the newly earned badge
+      try {
+        const { createNotificationForUser } = require('../controllers/notificationController');
+        const badgeSource = isPointBadge ? POINT_BADGES : ACHIEVEMENT_BADGES;
+        const badgeDef = badgeSource[badgeId];
+
+        if (createNotificationForUser && badgeDef) {
+          const title = 'New Badge Unlocked 🎉';
+          const message = `You earned the "${badgeDef.name}" badge. Keep it up!`;
+          const type = isPointBadge ? 'point' : 'achievement';
+
+          await createNotificationForUser(
+            userId,
+            title,
+            message,
+            type,
+            '/dashboard.html'
+          );
+        }
+      } catch (notifyError) {
+        console.error('Error creating badge notification:', notifyError);
+      }
+
       return true;
     }
     return false;
@@ -157,11 +181,20 @@ async function checkExpert(userId) {
 // Check wave champion (top 3 on leaderboard)
 async function checkWaveChampion(userId) {
   try {
-    const user = await User.findById(userId).select('points');
+    const user = await User.findById(userId).select('points createdAt');
     if (!user) return;
 
+    const userPoints = user.points || 0;
+
+    // Use the same rank logic as leaderboard (points desc, createdAt asc)
     const usersAbove = await User.countDocuments({
-      points: { $gt: user.points || 0 },
+      $or: [
+        { points: { $gt: userPoints } },
+        {
+          points: userPoints,
+          createdAt: { $lt: user.createdAt },
+        },
+      ],
     });
     const rank = usersAbove + 1;
 

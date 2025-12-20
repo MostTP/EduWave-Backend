@@ -25,26 +25,15 @@ exports.getLeaderboard = async (req, res) => {
     // Calculate total users for pagination
     const totalUsers = await User.countDocuments();
 
-    // Build leaderboard with proper ranking (accounting for ties)
+    // Build leaderboard with simple, deterministic ranking
     const leaderboard = [];
-    let currentRank = offsetNum + 1;
-    let previousPoints = null;
-    let rankOffset = 0;
-
     for (let i = 0; i < users.length; i++) {
       const user = users[i];
       const userPoints = user.points || 0;
-
-      // Handle tied ranks
-      if (previousPoints !== null && userPoints === previousPoints) {
-        rankOffset++;
-      } else {
-        currentRank += rankOffset;
-        rankOffset = 0;
-      }
+      const rank = offsetNum + i + 1;
 
       const leaderboardEntry = {
-        rank: currentRank,
+        rank,
         name: user.fullName,
         email: user.email,
         points: userPoints,
@@ -62,8 +51,6 @@ exports.getLeaderboard = async (req, res) => {
       }
 
       leaderboard.push(leaderboardEntry);
-      previousPoints = userPoints;
-      currentRank++;
     }
 
     // Get current user's rank if authenticated
@@ -189,13 +176,16 @@ exports.updateUserPoints = async (req, res) => {
     }
 
     if (points !== undefined) {
-      user.points = (user.points || 0) + parseInt(points);
-      await user.save();
-      
-      // Check badges when points change
-      const badgeService = require('../utils/badgeService');
-      await badgeService.checkPointBadges(user._id);
-      await badgeService.checkWaveChampion(user._id);
+      const delta = parseInt(points, 10);
+      if (!Number.isNaN(delta) && delta !== 0) {
+        user.points = (user.points || 0) + delta;
+        await user.save();
+        
+        // Check badges when points change
+        const badgeService = require('../utils/badgeService');
+        await badgeService.checkPointBadges(user._id);
+        await badgeService.checkWaveChampion(user._id);
+      }
     }
 
     res.status(200).json({
