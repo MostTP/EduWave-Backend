@@ -1,49 +1,33 @@
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 const dotenv = require('dotenv');
 
 dotenv.config();
 
-// Create reusable transporter object using SMTP transport
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || 'smtp.gmail.com',
-  port: process.env.SMTP_PORT || 587,
-  secure: process.env.SMTP_SECURE === 'true', // true for 465, false for other ports
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-  // Optional: Add TLS options for better security
-  tls: {
-    rejectUnauthorized: false, // Set to true in production with valid certificates
-  },
-});
-
-// Verify connection configuration
-transporter.verify(function (error, success) {
-  if (error) {
-    console.error('SMTP connection error:', error);
-  } else {
-    console.log('SMTP server is ready to send emails');
-  }
-});
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 const sendEmail = async (options) => {
   try {
-    const mailOptions = {
-      from: process.env.SMTP_FROM || process.env.SMTP_USER,
+    if (!process.env.RESEND_API_KEY) {
+      console.warn('RESEND_API_KEY not set. Email sending disabled.');
+      return { id: 'mock-email-id', message: 'Email sending disabled (no API key)' };
+    }
+
+    const { data, error } = await resend.emails.send({
+      from: process.env.FROM_EMAIL || 'EduWave ',
       to: options.email,
       subject: options.subject,
       html: options.html,
-      // Optional: Add text version for better email client compatibility
-      text: options.text || options.html.replace(/<[^>]*>/g, ''), // Strip HTML tags for text version
-    };
+    });
 
-    const info = await transporter.sendMail(mailOptions);
+    if (error) {
+      console.error('Resend error:', error);
+      throw error;
+    }
 
-    console.log('Email sent successfully:', info.messageId);
+    console.log('Email sent successfully via Resend:', data.id);
     return {
-      messageId: info.messageId,
-      response: info.response,
+      messageId: data.id,
+      response: data,
     };
   } catch (error) {
     console.error('Error sending email:', error);
