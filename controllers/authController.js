@@ -56,9 +56,9 @@ exports.register = async (req, res) => {
       emailVerificationExpire: Date.now() + 24 * 60 * 60 * 1000, // 24 hours
     });
 
-    // Create verification URL - point to frontend page
-    const frontendUrl = process.env.FRONTEND_URL || `${req.protocol}://${req.get('host').replace(':3000', '')}`;
-    const verificationUrl = `${frontendUrl}/verify-email.html?token=${verificationToken}`;
+    // Create verification URL - use backend URL since we're serving the page
+    const backendUrl = process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`;
+    const verificationUrl = `${backendUrl}/verify-email.html?token=${verificationToken}`;
 
     // Send verification email (non-blocking - don't fail registration if email fails)
     try {
@@ -363,9 +363,9 @@ exports.resendVerification = async (req, res) => {
     user.emailVerificationExpire = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
     await user.save({ validateBeforeSave: false });
 
-    // Create verification URL - point to frontend page
-    const frontendUrl = process.env.FRONTEND_URL || `${req.protocol}://${req.get('host').replace(':3000', '')}`;
-    const verificationUrl = `${frontendUrl}/verify-email.html?token=${verificationToken}`;
+    // Create verification URL - use backend URL since we're serving the page
+    const backendUrl = process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`;
+    const verificationUrl = `${backendUrl}/verify-email.html?token=${verificationToken}`;
 
     // Send verification email
     try {
