@@ -51,6 +51,11 @@ app.use(express.urlencoded({ extended: true }));
 // Serve static files from uploads directory
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
+// Serve verification page from frontend directory
+app.get('/verify-email.html', (req, res) => {
+  res.sendFile(path.join(__dirname, '../frontend/verify-email.html'));
+});
+
 // Connect to database
 connectDB();
 
