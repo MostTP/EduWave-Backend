@@ -215,13 +215,19 @@ exports.verifyEmail = async (req, res) => {
       token = token.split('?')[0];
     }
     
+    // Check if browser request (HTML) - show verification page with button
+    const acceptsHtml = req.headers.accept && req.headers.accept.includes('text/html');
+    if (acceptsHtml) {
+      if (!token || token.trim() === '') {
+        return res.status(400).send(getVerificationPage(false, 'Verification token is required.', null, req));
+      }
+      // Return the verification page with button (not auto-verify)
+      return res.status(200).send(getVerificationPage(null, null, token, req));
+    }
+    
+    // API request - proceed with verification
     // Validate token exists
     if (!token || token.trim() === '') {
-      // Check if browser request (HTML) or API request (JSON)
-      const acceptsHtml = req.headers.accept && req.headers.accept.includes('text/html');
-      if (acceptsHtml) {
-        return res.status(400).send(getVerificationHtml(false, 'Verification token is required.'));
-      }
       return res.status(400).json({
         success: false,
         message: 'Verification token is required',
@@ -240,10 +246,6 @@ exports.verifyEmail = async (req, res) => {
     });
 
     if (!user) {
-      const acceptsHtml = req.headers.accept && req.headers.accept.includes('text/html');
-      if (acceptsHtml) {
-        return res.status(400).send(getVerificationHtml(false, 'Invalid verification token. The token may be incorrect or already used.'));
-      }
       return res.status(400).json({
         success: false,
         message: 'Invalid verification token. The token may be incorrect or already used.',
@@ -252,10 +254,6 @@ exports.verifyEmail = async (req, res) => {
 
     // Check if token has expired
     if (user.emailVerificationExpire && user.emailVerificationExpire < Date.now()) {
-      const acceptsHtml = req.headers.accept && req.headers.accept.includes('text/html');
-      if (acceptsHtml) {
-        return res.status(400).send(getVerificationHtml(false, 'Verification token has expired. Please request a new verification email.'));
-      }
       return res.status(400).json({
         success: false,
         message: 'Verification token has expired. Please request a new verification email.',
@@ -264,10 +262,6 @@ exports.verifyEmail = async (req, res) => {
 
     // Check if email is already verified
     if (user.emailVerified) {
-      const acceptsHtml = req.headers.accept && req.headers.accept.includes('text/html');
-      if (acceptsHtml) {
-        return res.status(200).send(getVerificationHtml(true, 'Email is already verified.'));
-      }
       return res.status(200).json({
         success: true,
         message: 'Email is already verified',
@@ -280,22 +274,12 @@ exports.verifyEmail = async (req, res) => {
     user.emailVerificationExpire = undefined;
     await user.save({ validateBeforeSave: false });
 
-    // Check if browser request (HTML) or API request (JSON)
-    const acceptsHtml = req.headers.accept && req.headers.accept.includes('text/html');
-    if (acceptsHtml) {
-      return res.status(200).send(getVerificationHtml(true, 'Email verified successfully!'));
-    }
-
     res.status(200).json({
       success: true,
       message: 'Email verified successfully',
     });
   } catch (error) {
     console.error('Email verification error:', error);
-    const acceptsHtml = req.headers.accept && req.headers.accept.includes('text/html');
-    if (acceptsHtml) {
-      return res.status(500).send(getVerificationHtml(false, error.message || 'Server error during email verification'));
-    }
     res.status(500).json({
       success: false,
       message: error.message || 'Server error during email verification',
@@ -303,13 +287,213 @@ exports.verifyEmail = async (req, res) => {
   }
 };
 
-// Helper function to generate verification HTML page
-function getVerificationHtml(success, message) {
+// Helper function to generate verification HTML page with button
+function getVerificationPage(success, message, token, req = null) {
+  // Get backend URL from request or environment variable
+  let backendUrl = process.env.BACKEND_URL;
+  if (!backendUrl && req) {
+    backendUrl = `${req.protocol}://${req.get('host')}`;
+  }
+  if (!backendUrl) {
+    backendUrl = 'http://localhost:3000';
+  }
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5500';
+  
+  // If token is provided, show the verification page with button
+  if (token) {
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Email Verification - EduWave</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(135deg, #4A6CF7 0%, #2DD4BF 50%, #8B5CF6 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 500px;
+            width: 100%;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            text-align: center;
+        }
+        .icon {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 20px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 40px;
+            background: rgba(74, 108, 247, 0.1);
+            color: #4A6CF7;
+        }
+        .icon.success {
+            background: rgba(16, 185, 129, 0.1);
+            color: #10b981;
+        }
+        .icon.error {
+            background: rgba(239, 68, 68, 0.1);
+            color: #ef4444;
+        }
+        .icon.loading {
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        h1 { color: #1e293b; margin-bottom: 10px; font-size: 28px; }
+        p { color: #64748B; margin-bottom: 30px; line-height: 1.6; }
+        .btn {
+            display: inline-block;
+            padding: 14px 35px;
+            background: #4A6CF7;
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+            font-family: inherit;
+        }
+        .btn:hover:not(:disabled) { 
+            background: #8B5CF6; 
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(74, 108, 247, 0.4);
+        }
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        .message {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: none;
+        }
+        .message.show {
+            display: block;
+        }
+        .message.success {
+            background: rgba(16, 185, 129, 0.1);
+            color: #10b981;
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+        .message.error {
+            background: rgba(239, 68, 68, 0.1);
+            color: #ef4444;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div id="initial-state">
+            <div class="icon">
+                <i class="fas fa-envelope-open-text"></i>
+            </div>
+            <h1>Verify Your Email</h1>
+            <p>Click the button below to verify your email address and activate your account.</p>
+            <button id="verify-btn" class="btn" onclick="verifyEmail()">
+                <span id="btn-text">Verify Email</span>
+                <span id="btn-loading" class="hidden"><i class="fas fa-spinner fa-spin"></i> Verifying...</span>
+            </button>
+        </div>
+        
+        <div id="success-state" class="hidden">
+            <div class="icon success">
+                <i class="fas fa-check-circle"></i>
+            </div>
+            <h1>Email Verified!</h1>
+            <p>Your email has been successfully verified. You can now log in to your account.</p>
+            <a href="${frontendUrl}/auth.html?mode=signin" class="btn">Go to Login</a>
+        </div>
+        
+        <div id="error-state" class="hidden">
+            <div class="icon error">
+                <i class="fas fa-times-circle"></i>
+            </div>
+            <h1>Verification Failed</h1>
+            <div id="error-message" class="message error show">
+                <p id="error-text"></p>
+            </div>
+            <a href="${frontendUrl}/auth.html?mode=signin" class="btn">Go to Login</a>
+        </div>
+    </div>
+    
+    <script>
+        const token = '${token}';
+        const backendUrl = '${backendUrl}';
+        
+        async function verifyEmail() {
+            const verifyBtn = document.getElementById('verify-btn');
+            const btnText = document.getElementById('btn-text');
+            const btnLoading = document.getElementById('btn-loading');
+            const initialState = document.getElementById('initial-state');
+            const successState = document.getElementById('success-state');
+            const errorState = document.getElementById('error-state');
+            const errorText = document.getElementById('error-text');
+            
+            // Show loading state
+            verifyBtn.disabled = true;
+            btnText.classList.add('hidden');
+            btnLoading.classList.remove('hidden');
+            
+            try {
+                const response = await fetch(backendUrl + '/auth/verify-email/' + token, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    // Show success state
+                    initialState.classList.add('hidden');
+                    errorState.classList.add('hidden');
+                    successState.classList.remove('hidden');
+                } else {
+                    // Show error state
+                    initialState.classList.add('hidden');
+                    successState.classList.add('hidden');
+                    errorState.classList.remove('hidden');
+                    errorText.textContent = data.message || 'Verification failed. The link may be invalid or expired.';
+                }
+            } catch (error) {
+                console.error('Verification error:', error);
+                initialState.classList.add('hidden');
+                successState.classList.add('hidden');
+                errorState.classList.remove('hidden');
+                errorText.textContent = 'An error occurred while verifying your email. Please try again later.';
+            }
+        }
+    </script>
+</body>
+</html>`;
+  }
+  
+  // If success/message provided, show result page
   const icon = success ? 'fa-check-circle' : 'fa-times-circle';
   const iconClass = success ? 'success' : 'error';
   const title = success ? 'Email Verified!' : 'Verification Failed';
-  const bgColor = success ? '#10b981' : '#ef4444';
   
   return `<!DOCTYPE html>
 <html lang="en">
