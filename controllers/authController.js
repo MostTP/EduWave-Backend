@@ -66,13 +66,61 @@ exports.register = async (req, res) => {
         email: user.email,
         subject: 'Email Verification - EduWave',
         html: `
-          <h1>Welcome to EduWave!</h1>
-          <p>Please verify your email address by clicking the link below:</p>
-          <a href="${verificationUrl}" style="display: inline-block; padding: 10px 20px; background-color: #4CAF50; color: white; text-decoration: none; border-radius: 5px;">Verify Email</a>
-          <p>Or copy and paste this URL into your browser:</p>
-          <p>${verificationUrl}</p>
-          <p>This link will expire in 24 hours.</p>
-          <p>If you did not create an account, please ignore this email.</p>
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta charset="UTF-8">
+            <style>
+              body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+              .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+              .button-container { text-align: center; margin: 30px 0; }
+              .verify-button {
+                display: inline-block;
+                padding: 15px 40px;
+                background-color: #4A6CF7;
+                color: white !important;
+                text-decoration: none;
+                border-radius: 8px;
+                font-weight: bold;
+                font-size: 16px;
+                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+              }
+              .verify-button:hover {
+                background-color: #8B5CF6;
+              }
+              .footer { margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; font-size: 12px; color: #666; }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <h1>Welcome to EduWave!</h1>
+              <p>Thank you for signing up! To complete your registration, please verify your email address.</p>
+              <p>Click the button below to open the verification page where you can verify your email:</p>
+              
+              <div class="button-container">
+                <a href="${verificationUrl}" class="verify-button">Verify My Email Address</a>
+              </div>
+              
+              <p><strong>What happens next?</strong></p>
+              <ol>
+                <li>Click the button above (or the link below)</li>
+                <li>You'll be taken to our verification page</li>
+                <li>Click the "Verify Email" button on that page</li>
+                <li>Your account will be activated!</li>
+              </ol>
+              
+              <p>Or copy and paste this URL into your browser:</p>
+              <p style="word-break: break-all; color: #4A6CF7;">${verificationUrl}</p>
+              
+              <p><strong>Important:</strong> This verification link will expire in 24 hours.</p>
+              
+              <div class="footer">
+                <p>If you did not create an account with EduWave, please ignore this email.</p>
+                <p>&copy; ${new Date().getFullYear()} EduWave. All rights reserved.</p>
+              </div>
+            </div>
+          </body>
+          </html>
         `,
       });
       console.log('Verification email sent successfully to:', user.email);
@@ -323,15 +371,63 @@ exports.resendVerification = async (req, res) => {
     try {
       await sendEmail({
         email: user.email,
-        subject: 'Email Verification - EduWise',
+        subject: 'Email Verification - EduWave',
         html: `
-          <h1>Email Verification - EduWise</h1>
-          <p>Please verify your email address by clicking the link below:</p>
-          <a href="${verificationUrl}" style="display: inline-block; padding: 10px 20px; background-color: #4CAF50; color: white; text-decoration: none; border-radius: 5px;">Verify Email</a>
-          <p>Or copy and paste this URL into your browser:</p>
-          <p>${verificationUrl}</p>
-          <p>This link will expire in 24 hours.</p>
-          <p>If you did not request this verification email, please ignore it.</p>
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta charset="UTF-8">
+            <style>
+              body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+              .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+              .button-container { text-align: center; margin: 30px 0; }
+              .verify-button {
+                display: inline-block;
+                padding: 15px 40px;
+                background-color: #4A6CF7;
+                color: white !important;
+                text-decoration: none;
+                border-radius: 8px;
+                font-weight: bold;
+                font-size: 16px;
+                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+              }
+              .verify-button:hover {
+                background-color: #8B5CF6;
+              }
+              .footer { margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; font-size: 12px; color: #666; }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <h1>Email Verification Request</h1>
+              <p>You requested a new verification email. Please verify your email address to activate your account.</p>
+              <p>Click the button below to open the verification page where you can verify your email:</p>
+              
+              <div class="button-container">
+                <a href="${verificationUrl}" class="verify-button">Verify My Email Address</a>
+              </div>
+              
+              <p><strong>What happens next?</strong></p>
+              <ol>
+                <li>Click the button above (or the link below)</li>
+                <li>You'll be taken to our verification page</li>
+                <li>Click the "Verify Email" button on that page</li>
+                <li>Your account will be activated!</li>
+              </ol>
+              
+              <p>Or copy and paste this URL into your browser:</p>
+              <p style="word-break: break-all; color: #4A6CF7;">${verificationUrl}</p>
+              
+              <p><strong>Important:</strong> This verification link will expire in 24 hours.</p>
+              
+              <div class="footer">
+                <p>If you did not request this verification email, please ignore it.</p>
+                <p>&copy; ${new Date().getFullYear()} EduWave. All rights reserved.</p>
+              </div>
+            </div>
+          </body>
+          </html>
         `,
       });
 
