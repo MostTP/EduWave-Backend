@@ -69,7 +69,8 @@ async function awardBadge(userId, badgeId, isPointBadge = false) {
         if (createNotificationForUser && badgeDef) {
           const title = 'New Badge Unlocked 🎉';
           const message = `You earned the "${badgeDef.name}" badge. Keep it up!`;
-          const type = isPointBadge ? 'point' : 'achievement';
+          // Use 'success' type as badges are achievements (valid enum: 'info', 'success', 'warning', 'error')
+          const type = 'success';
 
           await createNotificationForUser(
             userId,
