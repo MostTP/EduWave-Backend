@@ -56,9 +56,9 @@ exports.register = async (req, res) => {
       emailVerificationExpire: Date.now() + 24 * 60 * 60 * 1000, // 24 hours
     });
 
-    // Create verification URL - point to frontend page
-    const frontendUrl = process.env.FRONTEND_URL || `${req.protocol}://${req.get('host').replace(':3000', '')}`;
-    const verificationUrl = `${frontendUrl}/verify-email.html?token=${verificationToken}`;
+    // Create verification URL - backend route now handles HTML responses
+    const backendUrl = process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`;
+    const verificationUrl = `${backendUrl}/auth/verify-email/${verificationToken}`;
 
     // Send verification email (non-blocking - don't fail registration if email fails)
     try {
@@ -217,6 +217,11 @@ exports.verifyEmail = async (req, res) => {
     
     // Validate token exists
     if (!token || token.trim() === '') {
+      // Check if browser request (HTML) or API request (JSON)
+      const acceptsHtml = req.headers.accept && req.headers.accept.includes('text/html');
+      if (acceptsHtml) {
+        return res.status(400).send(getVerificationHtml(false, 'Verification token is required.'));
+      }
       return res.status(400).json({
         success: false,
         message: 'Verification token is required',
@@ -235,6 +240,10 @@ exports.verifyEmail = async (req, res) => {
     });
 
     if (!user) {
+      const acceptsHtml = req.headers.accept && req.headers.accept.includes('text/html');
+      if (acceptsHtml) {
+        return res.status(400).send(getVerificationHtml(false, 'Invalid verification token. The token may be incorrect or already used.'));
+      }
       return res.status(400).json({
         success: false,
         message: 'Invalid verification token. The token may be incorrect or already used.',
@@ -243,6 +252,10 @@ exports.verifyEmail = async (req, res) => {
 
     // Check if token has expired
     if (user.emailVerificationExpire && user.emailVerificationExpire < Date.now()) {
+      const acceptsHtml = req.headers.accept && req.headers.accept.includes('text/html');
+      if (acceptsHtml) {
+        return res.status(400).send(getVerificationHtml(false, 'Verification token has expired. Please request a new verification email.'));
+      }
       return res.status(400).json({
         success: false,
         message: 'Verification token has expired. Please request a new verification email.',
@@ -251,6 +264,10 @@ exports.verifyEmail = async (req, res) => {
 
     // Check if email is already verified
     if (user.emailVerified) {
+      const acceptsHtml = req.headers.accept && req.headers.accept.includes('text/html');
+      if (acceptsHtml) {
+        return res.status(200).send(getVerificationHtml(true, 'Email is already verified.'));
+      }
       return res.status(200).json({
         success: true,
         message: 'Email is already verified',
@@ -263,18 +280,103 @@ exports.verifyEmail = async (req, res) => {
     user.emailVerificationExpire = undefined;
     await user.save({ validateBeforeSave: false });
 
+    // Check if browser request (HTML) or API request (JSON)
+    const acceptsHtml = req.headers.accept && req.headers.accept.includes('text/html');
+    if (acceptsHtml) {
+      return res.status(200).send(getVerificationHtml(true, 'Email verified successfully!'));
+    }
+
     res.status(200).json({
       success: true,
       message: 'Email verified successfully',
     });
   } catch (error) {
     console.error('Email verification error:', error);
+    const acceptsHtml = req.headers.accept && req.headers.accept.includes('text/html');
+    if (acceptsHtml) {
+      return res.status(500).send(getVerificationHtml(false, error.message || 'Server error during email verification'));
+    }
     res.status(500).json({
       success: false,
       message: error.message || 'Server error during email verification',
     });
   }
 };
+
+// Helper function to generate verification HTML page
+function getVerificationHtml(success, message) {
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5500';
+  const icon = success ? 'fa-check-circle' : 'fa-times-circle';
+  const iconClass = success ? 'success' : 'error';
+  const title = success ? 'Email Verified!' : 'Verification Failed';
+  const bgColor = success ? '#10b981' : '#ef4444';
+  
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Email Verification - EduWave</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(135deg, #4A6CF7 0%, #2DD4BF 50%, #8B5CF6 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 500px;
+            width: 100%;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            text-align: center;
+        }
+        .icon {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 20px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 40px;
+            background: ${success ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)'};
+            color: ${success ? '#10b981' : '#ef4444'};
+        }
+        h1 { color: #1e293b; margin-bottom: 10px; font-size: 28px; }
+        p { color: #64748B; margin-bottom: 30px; line-height: 1.6; }
+        .btn {
+            display: inline-block;
+            padding: 12px 30px;
+            background: #4A6CF7;
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        .btn:hover { background: #8B5CF6; transform: translateY(-2px); }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="icon">
+            <i class="fas ${icon}"></i>
+        </div>
+        <h1>${title}</h1>
+        <p>${message}</p>
+        <a href="${frontendUrl}/auth.html?mode=signin" class="btn">Go to Login</a>
+    </div>
+</body>
+</html>`;
+}
 
 exports.resendVerification = async (req, res) => {
   try {
@@ -314,9 +416,9 @@ exports.resendVerification = async (req, res) => {
     user.emailVerificationExpire = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
     await user.save({ validateBeforeSave: false });
 
-    // Create verification URL - point to frontend page
-    const frontendUrl = process.env.FRONTEND_URL || `${req.protocol}://${req.get('host').replace(':3000', '')}`;
-    const verificationUrl = `${frontendUrl}/verify-email.html?token=${verificationToken}`;
+    // Create verification URL - backend route now handles HTML responses
+    const backendUrl = process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`;
+    const verificationUrl = `${backendUrl}/auth/verify-email/${verificationToken}`;
 
     // Send verification email
     try {
