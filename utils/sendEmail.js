@@ -5,6 +5,27 @@ dotenv.config();
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
+// Helper function to format the 'from' field correctly
+// Resend requires: "email@example.com" or "Name <email@example.com>"
+const formatFromEmail = (email, name = 'EduWave') => {
+  if (!email) {
+    return `${name} <onboarding@resend.dev>`;
+  }
+
+  // If already in correct format (contains < and >), return as is
+  if (email.includes('<') && email.includes('>')) {
+    return email;
+  }
+
+  // If it's just an email address, format it with the name
+  if (email.includes('@')) {
+    return `${name} <${email}>`;
+  }
+
+  // Fallback
+  return `${name} <onboarding@resend.dev>`;
+};
+
 const sendEmail = async (options) => {
   try {
     if (!process.env.RESEND_API_KEY) {
@@ -30,9 +51,13 @@ const sendEmail = async (options) => {
       throw new Error('Email HTML content is required');
     }
 
+    // Format the 'from' field correctly
+    const fromEmail = formatFromEmail(process.env.FROM_EMAIL, process.env.FROM_NAME || 'EduWave');
+    console.log(`Using 'from' email: ${fromEmail}`);
+
     console.log(`Attempting to send email to: ${options.email}`);
     const { data, error } = await resend.emails.send({
-      from: process.env.FROM_EMAIL || 'EduWave <onboarding@resend.dev>',
+      from: fromEmail,
       to: options.email,
       subject: options.subject,
       html: options.html,
