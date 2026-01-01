@@ -34,6 +34,15 @@ exports.protect = async (req, res, next) => {
 
     next();
   } catch (error) {
+    // Provide specific error message for expired tokens
+    if (error.name === 'TokenExpiredError') {
+      return res.status(401).json({
+        success: false,
+        message: 'Token expired. Please refresh your session.',
+        expired: true,
+      });
+    }
+    
     return res.status(401).json({
       success: false,
       message: 'Not authorized to access this route',
@@ -65,7 +74,6 @@ exports.optionalAuth = async (req, res, next) => {
     // Continue even if user not found (optional auth)
     next();
   } catch (error) {
-    // Continue without setting req.user if token is invalid (optional auth)
     next();
   }
 };

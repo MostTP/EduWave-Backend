@@ -131,7 +131,7 @@ exports.getMyCourses = async (req, res) => {
 exports.getCourseById = async (req, res) => {
   try {
     const course = await Course.findOne({ courseId: req.params.courseId })
-      .populate('instructor', 'fullName email role')
+      .populate('instructor', 'fullName email role _id')
       .populate('enrolledStudents.userId', 'fullName email');
 
     if (!course) {
@@ -141,31 +141,32 @@ exports.getCourseById = async (req, res) => {
       });
     }
 
-    // Check access permissions:
-    // - Admins can access any course without accessCode
-    // - Admin-created courses are accessible to all without accessCode
-    // - Student/instructor-created courses require accessCode (unless user is admin)
     const User = require('../models/User');
+    
+    // Check if user is admin
     const isAdmin = req.user && req.user.role === 'admin';
+    
+    // Check if current user is the course creator
+    let isCourseCreator = false;
+    if (req.user && course.instructor) {
+      const instructorId = typeof course.instructor === 'object' 
+        ? course.instructor._id 
+        : course.instructor;
+      isCourseCreator = instructorId && instructorId.toString() === req.user._id.toString();
+    }
     
     // Check if course creator is admin
     let creatorIsAdmin = false;
-    const instructor = course.instructor;
-    
-    if (instructor && typeof instructor === 'object' && instructor.role) {
-      // Instructor is populated with user data
-      creatorIsAdmin = instructor.role === 'admin';
-    } else if (instructor) {
-      // If instructor is just an ID, fetch the user
-      const instructorUser = await User.findById(instructor);
+    if (typeof course.instructor === 'object' && course.instructor.role) {
+      creatorIsAdmin = course.instructor.role === 'admin';
+    } else if (course.instructor) {
+      const instructorUser = await User.findById(course.instructor);
       creatorIsAdmin = instructorUser && instructorUser.role === 'admin';
     }
-
-    // Access rules:
-    // 1. Admins can always access
-    // 2. Admin-created courses don't require accessCode (if course has no accessCode, it's admin-created)
-    // 3. Student/instructor-created courses require accessCode (unless user is admin)
-    const requiresAccessCode = !creatorIsAdmin && !isAdmin && course.accessCode;
+    
+    // Determine if access code is required
+    // No access code needed if: user is admin, user is creator, or course has no access code (admin-created)
+    const requiresAccessCode = course.accessCode && !isAdmin && !isCourseCreator && !creatorIsAdmin;
     let accessCodeUsed = false;
     
     if (requiresAccessCode) {
@@ -246,39 +247,20 @@ exports.getCourseByAccessCode = async (req, res) => {
     if (req.user && course.instructor && course.accessCode) {
       const instructorId = typeof course.instructor === 'object' ? course.instructor._id : course.instructor;
       
-      console.log(`🔔 Course access check: user=${req.user._id}, instructor=${instructorId}, accessCode=${course.accessCode}`);
-      
       if (instructorId.toString() !== req.user._id.toString()) {
         const User = require('../models/User');
         const { createNotificationForUser } = require('./notificationController');
         const accessingUser = await User.findById(req.user._id);
         
         if (accessingUser) {
-          console.log(`📬 Creating notification for course creator ${instructorId} about access by ${accessingUser.fullName}`);
-          const notification = await createNotificationForUser(
+          await createNotificationForUser(
             instructorId,
             'Course Accessed',
             `${accessingUser.fullName} accessed your course "${course.title}" using access code`,
             'info',
             `/course-manager.html`
           );
-          
-          if (notification) {
-            console.log(`✅ Notification created successfully: ${notification._id}`);
-          } else {
-            console.error(`❌ Failed to create notification for course creator`);
-          }
-        } else {
-          console.warn(`⚠️ Accessing user not found: ${req.user._id}`);
         }
-      } else {
-        console.log(`ℹ️ User is accessing their own course, no notification needed`);
-      }
-    } else {
-      if (!req.user) {
-        console.log(`ℹ️ Course accessed without authentication, no notification sent`);
-      } else if (!course.accessCode) {
-        console.log(`ℹ️ Course has no accessCode (public course), no notification sent`);
       }
     }
 
