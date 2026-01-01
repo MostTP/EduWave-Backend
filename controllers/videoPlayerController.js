@@ -169,22 +169,12 @@ exports.completeLesson = async (req, res) => {
       const user = await User.findById(req.user._id);
       if (user) {
         user.points = (user.points || 0) + 20; // Course completion points
-        
-        // Check if completed within 1 day (Quick Learner badge)
-        const courseStartTime = progress.createdAt || new Date();
-        const completionTime = Date.now() - courseStartTime.getTime();
-        const oneDay = 24 * 60 * 60 * 1000;
-        
-        if (completionTime < oneDay) {
-          const badgeService = require('../utils/badgeService');
-          await badgeService.awardBadge(user._id, 'quick_learner');
-        }
-        
         await user.save();
         
-        // Check expert badge (5 courses completed)
+        // Check badges
         const badgeService = require('../utils/badgeService');
-        await badgeService.checkExpert(user._id);
+        await badgeService.checkQuickLearner(user._id); // Check if completed within 1 day
+        await badgeService.checkExpert(user._id); // Check if 5 courses completed
         await badgeService.checkPointBadges(user._id);
       }
     }
