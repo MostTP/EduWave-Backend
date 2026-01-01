@@ -336,11 +336,9 @@ exports.submitGameResult = async (req, res) => {
           hostUser.points = (hostUser.points || 0) + 5;
           await hostUser.save();
           
-          // Check wave rider badge (5 wins in a row)
+          // Check badges
           const badgeService = require('../utils/badgeService');
-          if (hostStats.currentGameStreak >= 5) {
-            await badgeService.awardBadge(hostUser._id, 'wave_rider');
-          }
+          await badgeService.checkWaveRider(hostUser._id); // Check if 5 wins in a row
           await badgeService.checkPointBadges(hostUser._id);
         }
         
@@ -367,11 +365,9 @@ exports.submitGameResult = async (req, res) => {
           opponentUser.points = (opponentUser.points || 0) + 5;
           await opponentUser.save();
           
-          // Check wave rider badge (5 wins in a row)
+          // Check badges
           const badgeService = require('../utils/badgeService');
-          if (stats.currentGameStreak >= 5) {
-            await badgeService.awardBadge(opponentUser._id, 'wave_rider');
-          }
+          await badgeService.checkWaveRider(opponentUser._id); // Check if 5 wins in a row
           await badgeService.checkPointBadges(opponentUser._id);
         }
         
