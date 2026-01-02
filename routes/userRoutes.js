@@ -280,18 +280,63 @@ router.post('/track-tool', protect, async (req, res) => {
       });
     }
 
+    const now = new Date();
     const today = new Date().toDateString();
     const lastToolDate = user.lastToolUseDate ? new Date(user.lastToolUseDate).toDateString() : null;
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
 
-    // Check if this tool was already used today to prevent duplicate points
-    const lastToolUsed = user.lastToolUsed;
-    const sameToolToday = lastToolUsed && 
-                          lastToolUsed.toolId === toolId && 
-                          lastToolDate === today;
+    // Track unique tools used (not total count)
+    if (!user.toolsUsed) {
+      user.toolsUsed = [];
+    }
+    
+    // Find existing tool entry
+    const existingTool = user.toolsUsed.find(t => t.toolId === toolId);
+    
+    // Check if 24 hours have passed since last points award for THIS specific tool
+    let pointsAwarded = 0;
+    let canAwardPoints = false;
+    
+    if (!existingTool) {
+      // First time using this tool - award points
+      canAwardPoints = true;
+      user.toolsUsed.push({
+        toolId: toolId || 'unknown',
+        toolName: toolName || 'Unknown Tool',
+        firstUsedAt: now,
+        lastUsedAt: now,
+        lastPointsAwardedAt: now,
+      });
+    } else {
+      // Tool was used before - check if 24 hours have passed since last points award
+      const lastPointsAwarded = existingTool.lastPointsAwardedAt 
+        ? new Date(existingTool.lastPointsAwardedAt) 
+        : null;
+      
+      if (!lastPointsAwarded) {
+        // No record of when points were awarded - award now (backward compatibility)
+        canAwardPoints = true;
+      } else {
+        // Check if 24 hours (86400000 ms) have passed
+        const timeSinceLastAward = now.getTime() - lastPointsAwarded.getTime();
+        const hoursSinceLastAward = timeSinceLastAward / (1000 * 60 * 60);
+        
+        if (hoursSinceLastAward >= 24) {
+          canAwardPoints = true;
+        }
+      }
+      
+      // Always update last used date
+      existingTool.lastUsedAt = now;
+      
+      // Update lastPointsAwardedAt only if we're awarding points
+      if (canAwardPoints) {
+        existingTool.lastPointsAwardedAt = now;
+      }
+    }
 
-    // Update consecutive tool days
+    // Update consecutive tool days (any tool usage counts)
     if (!lastToolDate) {
       user.consecutiveToolDays = 1;
     } else if (lastToolDate === yesterday.toDateString()) {
@@ -300,41 +345,18 @@ router.post('/track-tool', protect, async (req, res) => {
       user.consecutiveToolDays = 1;
     }
 
+    // Update last tool used (for consecutive days tracking)
     user.lastToolUsed = {
       toolId: toolId || 'unknown',
       toolName: toolName || 'Unknown Tool',
-      usedAt: new Date(),
+      usedAt: now,
     };
-    user.lastToolUseDate = new Date();
+    user.lastToolUseDate = now;
     
-    // Track unique tools used (not total count)
-    if (!user.toolsUsed) {
-      user.toolsUsed = [];
-    }
-    
-    // Check if this tool was already used before
-    const existingTool = user.toolsUsed.find(t => t.toolId === toolId);
-    const now = new Date();
-    
-    if (existingTool) {
-      // Update last used date for existing tool
-      existingTool.lastUsedAt = now;
-    } else {
-      // Add new unique tool
-      user.toolsUsed.push({
-        toolId: toolId || 'unknown',
-        toolName: toolName || 'Unknown Tool',
-        firstUsedAt: now,
-        lastUsedAt: now,
-      });
-    }
-    
-    // Update toolsUsedCount to reflect unique tools count
     user.toolsUsedCount = user.toolsUsed.length;
 
-    // Award points only if this tool hasn't been used today (prevent duplicate points)
-    let pointsAwarded = 0;
-    if (!sameToolToday) {
+    // Award points only if 24 hours have passed since last award for this tool
+    if (canAwardPoints) {
       user.points = (user.points || 0) + 1;
       pointsAwarded = 1;
     }
@@ -384,7 +406,7 @@ router.post('/track-tool', protect, async (req, res) => {
       data: {
         pointsAwarded,
         totalPoints: user.points || 0,
-        alreadyUsedToday: sameToolToday,
+        alreadyUsedToday: !canAwardPoints && existingTool !== undefined,
       },
     });
   } catch (error) {
