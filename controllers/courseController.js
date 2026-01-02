@@ -739,16 +739,25 @@ exports.assignCoursesToAdmin = async (req, res) => {
       });
     }
 
-    // Find all courses without instructors or with null instructors
+    // Find all courses that need to be assigned to admin:
+    // 1. Courses without instructors
+    // 2. Courses with instructors that are not admins
     const coursesWithoutInstructor = await Course.find({
       $or: [
         { instructor: null },
         { instructor: { $exists: false } }
       ]
+    }).populate('instructor', 'role');
+
+    // Find courses with non-admin instructors
+    const allCourses = await Course.find({}).populate('instructor', 'role');
+    const coursesWithNonAdminInstructor = allCourses.filter(course => {
+      if (!course.instructor) return false;
+      return course.instructor.role !== 'admin';
     });
 
-    // Update all courses to assign them to admin
-    const updateResult = await Course.updateMany(
+    // Update all courses without instructors to assign them to admin
+    const updateResult1 = await Course.updateMany(
       {
         $or: [
           { instructor: null },
@@ -763,13 +772,31 @@ exports.assignCoursesToAdmin = async (req, res) => {
       }
     );
 
+    // Update all courses with non-admin instructors to assign them to admin
+    const courseIdsToUpdate = coursesWithNonAdminInstructor.map(c => c._id);
+    const updateResult2 = await Course.updateMany(
+      {
+        _id: { $in: courseIdsToUpdate }
+      },
+      {
+        $set: {
+          instructor: adminUser._id,
+          instructorName: adminUser.fullName || 'EduWave System'
+        }
+      }
+    );
+
+    const totalUpdated = updateResult1.modifiedCount + updateResult2.modifiedCount;
+
     res.status(200).json({
       success: true,
-      message: `Assigned ${updateResult.modifiedCount} courses to admin`,
+      message: `Assigned ${totalUpdated} courses to admin`,
       adminId: adminUser._id,
       adminName: adminUser.fullName,
-      coursesUpdated: updateResult.modifiedCount,
-      coursesFound: coursesWithoutInstructor.length,
+      coursesUpdated: totalUpdated,
+      coursesWithoutInstructor: updateResult1.modifiedCount,
+      coursesWithNonAdminInstructor: updateResult2.modifiedCount,
+      totalCoursesFound: coursesWithoutInstructor.length + coursesWithNonAdminInstructor.length,
     });
   } catch (error) {
     res.status(500).json({
