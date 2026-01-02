@@ -711,3 +711,70 @@ exports.seedDefaultCourses = async (req, res) => {
   }
 };
 
+// Assign all courses without instructors to admin (one-time fix)
+exports.assignCoursesToAdmin = async (req, res) => {
+  try {
+    // Only allow admin
+    if (!req.user || req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Only admins can assign courses',
+      });
+    }
+
+    const User = require('../models/User');
+    const Course = require('../models/Course');
+    
+    // Get or create a system admin user
+    let adminUser = await User.findOne({ role: 'admin' });
+    
+    if (!adminUser) {
+      adminUser = await User.create({
+        fullName: 'EduWave System',
+        email: 'system@eduwave.com',
+        password: crypto.randomBytes(32).toString('hex'),
+        role: 'admin',
+        isEmailVerified: true,
+      });
+    }
+
+    // Find all courses without instructors or with null instructors
+    const coursesWithoutInstructor = await Course.find({
+      $or: [
+        { instructor: null },
+        { instructor: { $exists: false } }
+      ]
+    });
+
+    // Update all courses to assign them to admin
+    const updateResult = await Course.updateMany(
+      {
+        $or: [
+          { instructor: null },
+          { instructor: { $exists: false } }
+        ]
+      },
+      {
+        $set: {
+          instructor: adminUser._id,
+          instructorName: adminUser.fullName || 'EduWave System'
+        }
+      }
+    );
+
+    res.status(200).json({
+      success: true,
+      message: `Assigned ${updateResult.modifiedCount} courses to admin`,
+      adminId: adminUser._id,
+      adminName: adminUser.fullName,
+      coursesUpdated: updateResult.modifiedCount,
+      coursesFound: coursesWithoutInstructor.length,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+

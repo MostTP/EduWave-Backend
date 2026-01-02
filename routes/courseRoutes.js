@@ -16,6 +16,7 @@ const {
   deleteCourse,
   getAllCourses,
   seedDefaultCourses,
+  assignCoursesToAdmin,
 } = require('../controllers/courseController');
 
 // Ensure uploads directory exists
@@ -92,6 +93,7 @@ router.get('/access/:accessCode', optionalAuth, getCourseByAccessCode);
 // Protected routes - specific routes must come before parameterized routes
 router.post('/', protect, createCourse);
 router.post('/seed-default', protect, seedDefaultCourses);
+router.post('/assign-to-admin', protect, assignCoursesToAdmin);
 router.get('/my-courses', protect, getMyCourses);
 router.get('/all', protect, getAllCourses);
 router.get('/enrolled/my-courses', protect, getEnrolledCourses);
