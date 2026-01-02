@@ -758,16 +758,11 @@ exports.assignCoursesToAdmin = async (req, res) => {
       if (!hasInstructor) {
         // Course has no instructor (null ObjectId, invalid ObjectId, or populated result is null)
         coursesWithoutInstructor.push(course._id);
-        console.log(`Course without instructor: ${course.courseId || course.title}`);
       } else if (course.instructor.role && course.instructor.role !== 'admin') {
         // Course has instructor but it's not an admin
         coursesWithNonAdminInstructor.push(course._id);
-        console.log(`Course with non-admin instructor: ${course.courseId || course.title}, role: ${course.instructor.role}`);
       }
     }
-
-    console.log(`Found ${coursesWithoutInstructor.length} courses without instructor`);
-    console.log(`Found ${coursesWithNonAdminInstructor.length} courses with non-admin instructor`);
 
     // Update all courses without instructors to assign them to admin
     let updateResult1 = { modifiedCount: 0, matchedCount: 0 };
@@ -784,11 +779,8 @@ exports.assignCoursesToAdmin = async (req, res) => {
           }
         }
       );
-      console.log(`Updated ${updateResult1.modifiedCount} courses without instructor (matched: ${updateResult1.matchedCount})`);
-      
       // If updateMany didn't work, try updating individually
       if (updateResult1.modifiedCount === 0 && coursesWithoutInstructor.length > 0) {
-        console.log('updateMany returned 0, trying individual updates...');
         let individualUpdates = 0;
         for (const courseId of coursesWithoutInstructor) {
           try {
@@ -804,11 +796,10 @@ exports.assignCoursesToAdmin = async (req, res) => {
             );
             if (result) individualUpdates++;
           } catch (err) {
-            console.error(`Error updating course ${courseId}:`, err.message);
+            // Silent error handling
           }
         }
         updateResult1.modifiedCount = individualUpdates;
-        console.log(`Updated ${individualUpdates} courses individually`);
       }
     }
 
@@ -826,7 +817,6 @@ exports.assignCoursesToAdmin = async (req, res) => {
           }
         }
       );
-      console.log(`Updated ${updateResult2.modifiedCount} courses with non-admin instructor`);
     }
 
     const totalUpdated = updateResult1.modifiedCount + updateResult2.modifiedCount;
