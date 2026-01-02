@@ -139,6 +139,7 @@ const userSchema = new mongoose.Schema({
     toolName: String,
     firstUsedAt: Date,
     lastUsedAt: Date,
+    lastPointsAwardedAt: Date,
   }],
   consecutiveToolDays: {
     type: Number,
