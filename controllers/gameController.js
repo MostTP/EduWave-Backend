@@ -126,74 +126,101 @@ exports.joinDuel = async (req, res) => {
       });
     }
 
-    const duel = await GameSession.findOne({ duelKey: duelKey.toUpperCase() });
+    // Prevent host from joining their own duel - check first
+    const initialCheck = await GameSession.findOne({ 
+      duelKey: duelKey.toUpperCase() 
+    }).select('hostId status expiresAt').lean();
 
-    if (!duel) {
+    if (!initialCheck) {
       return res.status(404).json({
         success: false,
         message: 'Invalid duel key',
       });
     }
 
-    // Check if duel already has an opponent (prevent race condition)
-    if (duel.opponentId) {
-      return res.status(400).json({
-        success: false,
-        message: 'This duel already has an opponent',
-      });
-    }
-
-    if (duel.status !== 'waiting') {
-      return res.status(400).json({
-        success: false,
-        message: `Duel is ${duel.status}`,
-      });
-    }
-
-    if (duel.expiresAt < new Date()) {
-      duel.status = 'expired';
-      await duel.save();
-      return res.status(400).json({
-        success: false,
-        message: 'Duel key has expired',
-      });
-    }
-
-    if (duel.hostId.toString() === req.user._id.toString()) {
+    // Check if host is trying to join their own duel
+    if (initialCheck.hostId.toString() === req.user._id.toString()) {
       return res.status(400).json({
         success: false,
         message: 'You cannot join your own duel',
       });
     }
 
-    // Joining duels is unlimited for all users - no limit checks needed
+    // Check if expired
+    if (initialCheck.expiresAt < new Date()) {
+      // Update status to expired if not already
+      await GameSession.findOneAndUpdate(
+        { duelKey: duelKey.toUpperCase(), status: { $ne: 'expired' } },
+        { status: 'expired' }
+      );
+      return res.status(400).json({
+        success: false,
+        message: 'Duel key has expired',
+      });
+    }
+
     // Use findOneAndUpdate with atomic operation to prevent race conditions
+    // This is the ONLY place where we update opponentId - atomic operation ensures consistency
     const updatedDuel = await GameSession.findOneAndUpdate(
       { 
         duelKey: duelKey.toUpperCase(),
         status: 'waiting',
-        opponentId: null // Only update if no opponent exists
+        opponentId: null, // Only update if no opponent exists
+        expiresAt: { $gt: new Date() } // Also check expiration atomically
       },
       {
-        opponentId: req.user._id,
-        opponentName: req.user.fullName,
-        status: 'locked',
+        $set: {
+          opponentId: req.user._id,
+          opponentName: req.user.fullName,
+          status: 'locked',
+        }
       },
-      { new: true }
+      { 
+        new: true,
+        runValidators: true
+        // Note: The atomic findOneAndUpdate ensures consistency
+        // If using replica set, MongoDB will handle write concern automatically
+      }
     );
 
     if (!updatedDuel) {
-      // Duel was already taken or status changed
-      const currentDuel = await GameSession.findOne({ duelKey: duelKey.toUpperCase() });
-      if (currentDuel && currentDuel.opponentId) {
+      // Duel was already taken, status changed, or expired
+      // Re-fetch to get current state
+      const currentDuel = await GameSession.findOne({ 
+        duelKey: duelKey.toUpperCase() 
+      }).lean();
+      
+      if (!currentDuel) {
+        return res.status(404).json({
+          success: false,
+          message: 'Duel not found',
+        });
+      }
+      
+      if (currentDuel.opponentId) {
         return res.status(400).json({
           success: false,
           message: 'This duel already has an opponent',
         });
       }
+      
+      if (currentDuel.status !== 'waiting') {
+        return res.status(400).json({
+          success: false,
+          message: `Duel is ${currentDuel.status}`,
+        });
+      }
+      
+      if (currentDuel.expiresAt < new Date()) {
+        return res.status(400).json({
+          success: false,
+          message: 'Duel key has expired',
+        });
+      }
+      
       return res.status(400).json({
         success: false,
-        message: 'Unable to join duel. It may have been cancelled or already started.',
+        message: 'Unable to join duel. Please try again.',
       });
     }
 
@@ -207,6 +234,7 @@ exports.joinDuel = async (req, res) => {
       },
     });
   } catch (error) {
+    console.error('[joinDuel] Error:', error);
     res.status(400).json({
       success: false,
       message: error.message,
@@ -222,11 +250,14 @@ exports.getDuelStatus = async (req, res) => {
     // Use lean() for better performance and ensure fresh data
     // Don't cache this endpoint - it needs real-time status
     // Always get fresh data - don't use any caching
+    // Read from primary to avoid replica lag (if using replica set)
     const duel = await GameSession.findOne({ duelKey: duelKey.toUpperCase() })
       .populate('hostId', 'fullName email')
       .populate('opponentId', 'fullName email')
       .lean()
       .maxTimeMS(5000); // 5 second timeout to prevent hanging
+      // Note: .read('primary') would ensure reading from primary, but may not be available
+      // if not using replica set. The atomic update in joinDuel should ensure consistency.
 
     if (!duel) {
       return res.status(404).json({
