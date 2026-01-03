@@ -219,9 +219,14 @@ exports.getDuelStatus = async (req, res) => {
   try {
     const { duelKey } = req.params;
 
+    // Use lean() for better performance and ensure fresh data
+    // Don't cache this endpoint - it needs real-time status
+    // Always get fresh data - don't use any caching
     const duel = await GameSession.findOne({ duelKey: duelKey.toUpperCase() })
       .populate('hostId', 'fullName email')
-      .populate('opponentId', 'fullName email');
+      .populate('opponentId', 'fullName email')
+      .lean()
+      .maxTimeMS(5000); // 5 second timeout to prevent hanging
 
     if (!duel) {
       return res.status(404).json({
@@ -229,6 +234,11 @@ exports.getDuelStatus = async (req, res) => {
         message: 'Duel not found',
       });
     }
+
+    // Set cache control headers to prevent caching
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
 
     res.status(200).json({
       success: true,
